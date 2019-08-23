@@ -1,0 +1,74 @@
+From 792e9948a52ad8867bedd123ba7296662999e95e Mon Sep 17 00:00:00 2001
+From: Pavel Zhukov <pzhukov@redhat.com>
+Date: Thu, 21 Feb 2019 10:39:36 +0100
+Subject: [PATCH] Send unicast request/release via correct interface
+
+(#800561, #1177351)
+(Submitted to dhcp-bugs@isc.org - [ISC-Bugs #30544])
+
+---
+ client/dhclient.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/client/dhclient.c b/client/dhclient.c
+index ccc98e4..27fde69 100644
+--- a/client/dhclient.c
++++ b/client/dhclient.c
+@@ -3171,6 +3171,14 @@ void send_request (cpp)
+ #endif
+ 	if (destination.sin_addr.s_addr != INADDR_BROADCAST &&
+ 	    fallback_interface) {
++#if defined(SO_BINDTODEVICE)
++		if (setsockopt(fallback_interface -> wfdesc, SOL_SOCKET,
++			       SO_BINDTODEVICE, client->interface->name,
++			       strlen(client->interface->name)) < 0) {
++			log_error("%s:%d: Failed to bind fallback interface"
++				  " to %s: %m", MDL, client->interface->name);
++		}
++#endif
+ 		result = send_packet(fallback_interface, NULL, &client->packet,
+ 				     client->packet_length, from, &destination,
+ 				     NULL);
+@@ -3180,6 +3188,13 @@ void send_request (cpp)
+ 				  client->packet_length,
+ 				  fallback_interface->name);
+ 		}
++#if defined(SO_BINDTODEVICE)
++		if (setsockopt(fallback_interface -> wfdesc, SOL_SOCKET,
++			       SO_BINDTODEVICE, NULL, 0) < 0) {
++			log_fatal("%s:%d: Failed to unbind fallback interface:"
++				  " %m", MDL);
++		}
++#endif
+         }
+ 	else {
+ 		/* Send out a packet. */
+@@ -3297,6 +3312,14 @@ void send_release (cpp)
+ 	} else
+ #endif
+ 	if (fallback_interface) {
++#if defined(SO_BINDTODEVICE)
++		if (setsockopt(fallback_interface -> wfdesc, SOL_SOCKET,
++			       SO_BINDTODEVICE, client->interface->name,
++			       strlen(client->interface->name)) < 0) {
++			log_error("%s:%d: Failed to bind fallback interface"
++				  " to %s: %m", MDL, client->interface->name);
++		}
++#endif
+ 		result = send_packet(fallback_interface, NULL, &client->packet,
+ 				      client->packet_length, from, &destination,
+ 				      NULL);
+@@ -3306,6 +3329,13 @@ void send_release (cpp)
+ 				  client->packet_length,
+ 				  fallback_interface->name);
+ 		}
++#if defined(SO_BINDTODEVICE)
++		if (setsockopt(fallback_interface -> wfdesc, SOL_SOCKET,
++			       SO_BINDTODEVICE, NULL, 0) < 0) {
++			log_fatal("%s:%d: Failed to unbind fallback interface:"
++				  " %m", MDL);
++		}
++#endif
+         } else {
+ 		/* Send out a packet. */
+ 		result = send_packet(client->interface, NULL, &client->packet,

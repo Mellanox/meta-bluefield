@@ -1,0 +1,328 @@
+From 31394d56dfd7a20ede0d4ba9d158410a1cd04d11 Mon Sep 17 00:00:00 2001
+From: Pavel Zhukov <pzhukov@redhat.com>
+Date: Thu, 21 Feb 2019 10:35:47 +0100
+Subject: [PATCH] Add GUID/DUID to dhcpd logs (#1064416)
+
+---
+ client/dhclient.c | 75 ++++++++++++++++++++++++++++++++++++---------
+ server/dhcp.c     | 78 ++++++++++++++++++++++++++++-------------------
+ 2 files changed, 108 insertions(+), 45 deletions(-)
+
+diff --git a/client/dhclient.c b/client/dhclient.c
+index dc9080e..8e57da9 100644
+--- a/client/dhclient.c
++++ b/client/dhclient.c
+@@ -1170,6 +1170,26 @@ main(int argc, char **argv) {
+ 		}
+ 	}
+ 
++	/* We create a backup seed before rediscovering interfaces in order to
++	   have a seed built using all of the available interfaces
++	   It's interesting if required interfaces doesn't let us defined
++	   a really unique seed due to a lack of valid HW addr later
++	   (this is the case with DHCP over IB)
++	   We only use the last device as using a sum could broke the
++	   uniqueness of the seed among multiple nodes
++	 */
++	unsigned backup_seed = 0;
++	for (ip = interfaces; ip; ip = ip -> next) {
++		int junk;
++		if ( ip -> hw_address.hlen <= sizeof seed )
++		  continue;
++		memcpy (&junk,
++			&ip -> hw_address.hbuf [ip -> hw_address.hlen -
++						sizeof seed], sizeof seed);
++		backup_seed = junk;
++	}
++
++
+ 	/* At this point, all the interfaces that the script thinks
+ 	   are relevant should be running, so now we once again call
+ 	   discover_interfaces(), and this time ask it to actually set
+@@ -1184,14 +1204,36 @@ main(int argc, char **argv) {
+ 	   Not much entropy, but we're booting, so we're not likely to
+ 	   find anything better. */
+ 	seed = 0;
++	int seed_flag = 0;
+ 	for (ip = interfaces; ip; ip = ip->next) {
+ 		int junk;
++		if ( ip -> hw_address.hlen <= sizeof seed )
++		  continue;
+ 		memcpy(&junk,
+ 		       &ip->hw_address.hbuf[ip->hw_address.hlen -
+ 					    sizeof seed], sizeof seed);
+ 		seed += junk;
++		seed_flag = 1;
+ 	}
+-	srandom(seed + cur_time + (unsigned)getpid());
++	if ( seed_flag == 0 ) {
++		if ( backup_seed != 0 ) {
++		  seed = backup_seed;
++		  log_info ("xid: rand init seed (0x%x) built using all"
++			    " available interfaces",seed);
++		}
++		else {
++		  seed = cur_time^((unsigned) gethostid()) ;
++		  log_info ("xid: warning: no netdev with useable HWADDR found"
++			    " for seed's uniqueness enforcement");
++		  log_info ("xid: rand init seed (0x%x) built using gethostid",
++			    seed);
++		}
++		/* we only use seed and no current time as a broadcast reply */
++		/* will certainly be used by the hwaddrless interface */
++		srandom(seed + ((unsigned)(cur_tv.tv_usec * 1000000)) + (unsigned)getpid());
++	}
++	else
++	        srandom(seed + ((unsigned)(cur_tv.tv_usec * 1000000)) + (unsigned)getpid());
+ 
+ 	/* Setup specific Infiniband options */
+ 	for (ip = interfaces; ip; ip = ip->next) {
+@@ -1746,10 +1788,10 @@ void dhcpack (packet)
+ #endif
+ 		return;
+ 	}
+-
+-	log_info ("DHCPACK of %s from %s",
+-		  inet_ntoa(packet->raw->yiaddr),
+-		  piaddr (packet->client_addr));
++	log_info ("DHCPACK of %s from %s (xid=0x%x)",
++                  inet_ntoa(packet->raw->yiaddr),
++                  piaddr (packet -> client_addr),
++                  ntohl(client -> xid));
+ 
+ 	lease = packet_to_lease (packet, client);
+ 	if (!lease) {
+@@ -2669,7 +2711,7 @@ void dhcpnak (packet)
+ 		return;
+ 	}
+ 
+-	log_info ("DHCPNAK from %s", piaddr (packet -> client_addr));
++	log_info ("DHCPNAK from %s (xid=0x%x)", piaddr (packet -> client_addr), ntohl(client -> xid));
+ 
+ 	if (!client -> active) {
+ #if defined (DEBUG)
+@@ -2802,10 +2844,10 @@ void send_discover (cpp)
+ 			  (long)(client -> interval));
+ 	} else
+ #endif
+-	log_info ("DHCPDISCOVER on %s to %s port %d interval %ld",
++	log_info ("DHCPDISCOVER on %s to %s port %d interval %ld (xid=0x%x)",
+ 	      client -> name ? client -> name : client -> interface -> name,
+ 	      inet_ntoa (sockaddr_broadcast.sin_addr),
+-	      ntohs (sockaddr_broadcast.sin_port), (long)(client -> interval));
++	      ntohs (sockaddr_broadcast.sin_port), (long)(client -> interval), ntohl(client -> xid));
+ 
+ 	/* Send out a packet. */
+ #if defined(DHCPv6) && defined(DHCP4o6)
+@@ -3108,10 +3150,12 @@ void send_request (cpp)
+ 	}
+ 
+ 	strncpy(rip_buf, rip_str, sizeof(rip_buf)-1);
+-	log_info ("DHCPREQUEST for %s on %s to %s port %d", rip_buf,
++	log_info ("DHCPREQUEST for %s on %s to %s port %d (xid=0x%x)",
++                  rip_buf,
+ 		  client->name ? client->name : client->interface->name,
+ 		  inet_ntoa(destination.sin_addr),
+-		  ntohs (destination.sin_port));
++		  ntohs (destination.sin_port),
++                  ntohl(client -> xid));
+ 
+ #if defined(DHCPv6) && defined(DHCP4o6)
+ 	if (dhcpv4_over_dhcpv6) {
+@@ -3168,11 +3212,13 @@ void send_decline (cpp)
+ 		log_info ("DHCPDECLINE");
+ 	} else
+ #endif
+-	log_info ("DHCPDECLINE of %s on %s to %s port %d",
++	log_info ("DHCPDECLINE of %s on %s to %s port %d (xid=0x%x)",                  
+ 		  piaddr(client->requested_address),
+ 		  (client->name ? client->name : client->interface->name),
+ 		  inet_ntoa(sockaddr_broadcast.sin_addr),
+-		  ntohs(sockaddr_broadcast.sin_port));
++		  ntohs(sockaddr_broadcast.sin_port),
++                  ntohl(client -> xid));
++
+ 
+ 	/* Send out a packet. */
+ #if defined(DHCPv6) && defined(DHCP4o6)
+@@ -3231,11 +3277,12 @@ void send_release (cpp)
+ 		log_info ("DHCPRELEASE");
+ 	} else
+ #endif
+-	log_info ("DHCPRELEASE of %s on %s to %s port %d",
++	log_info ("DHCPRELEASE of %s on %s to %s port %d (xid=0x%x)",
+ 		  piaddr(client->active->address),
+ 		  client->name ? client->name : client->interface->name,
+ 		  inet_ntoa (destination.sin_addr),
+-		  ntohs (destination.sin_port));
++		  ntohs (destination.sin_port),
++                  ntohl(client -> xid));
+ 
+ #if defined(DHCPv6) && defined(DHCP4o6)
+ 	if (dhcpv4_over_dhcpv6) {
+diff --git a/server/dhcp.c b/server/dhcp.c
+index 20f2a62..0582c4c 100644
+--- a/server/dhcp.c
++++ b/server/dhcp.c
+@@ -87,6 +87,42 @@ const int dhcp_type_name_max = ((sizeof dhcp_type_names) / sizeof (char *));
+ 
+ static TIME leaseTimeCheck(TIME calculated, TIME alternate);
+ 
++char *print_client_identifier_from_packet (packet)
++	struct packet *packet;
++{
++	struct option_cache *oc;
++	struct data_string client_identifier;
++	char *ci;
++
++	memset (&client_identifier, 0, sizeof client_identifier);
++
++	oc = lookup_option (&dhcp_universe, packet -> options,
++			DHO_DHCP_CLIENT_IDENTIFIER);
++	if (oc &&
++	    evaluate_option_cache (&client_identifier,
++				    packet, (struct lease *)0,
++				    (struct client_state *)0,
++				    packet -> options,
++				    (struct option_state *)0,
++				    &global_scope, oc, MDL)) {
++		ci = print_hw_addr (HTYPE_INFINIBAND, client_identifier.len, client_identifier.data);
++		data_string_forget (&client_identifier, MDL);
++		return ci;
++	} else
++		return "\"no client id\"";
++}
++
++char *print_hw_addr_or_client_id (packet)
++	struct packet *packet;
++{
++	if (packet -> raw -> htype == HTYPE_INFINIBAND)
++		return print_client_identifier_from_packet (packet);
++	else
++		return print_hw_addr (packet -> raw -> htype,
++				      packet -> raw -> hlen,
++				      packet -> raw -> chaddr);
++}
++
+ void
+ dhcp (struct packet *packet) {
+ 	int ms_nulltp = 0;
+@@ -129,9 +165,7 @@ dhcp (struct packet *packet) {
+ 
+ 		log_info("%s from %s via %s: %s", s,
+ 			 (packet->raw->htype
+-			  ? print_hw_addr(packet->raw->htype,
+-					  packet->raw->hlen,
+-					  packet->raw->chaddr)
++			  ? print_hw_addr_or_client_id(packet)
+ 			  : "<no identifier>"),
+ 			 packet->raw->giaddr.s_addr
+ 			 ? inet_ntoa(packet->raw->giaddr)
+@@ -328,9 +362,7 @@ void dhcpdiscover (packet, ms_nulltp)
+ #endif
+ 	snprintf (msgbuf, sizeof msgbuf, "DHCPDISCOVER from %s %s%s%svia %s",
+ 		 (packet -> raw -> htype
+-		  ? print_hw_addr (packet -> raw -> htype,
+-				   packet -> raw -> hlen,
+-				   packet -> raw -> chaddr)
++		  ? print_hw_addr_or_client_id (packet)
+ 		  : (lease
+ 		     ? print_hex_1(lease->uid_len, lease->uid, 60)
+ 		     : "<no identifier>")),
+@@ -542,9 +574,7 @@ void dhcprequest (packet, ms_nulltp, ip_lease)
+ 		 "DHCPREQUEST for %s%s from %s %s%s%svia %s",
+ 		 piaddr (cip), smbuf,
+ 		 (packet -> raw -> htype
+-		  ? print_hw_addr (packet -> raw -> htype,
+-				   packet -> raw -> hlen,
+-				   packet -> raw -> chaddr)
++		  ? print_hw_addr_or_client_id(packet)
+ 		  : (lease
+ 		     ? print_hex_1(lease->uid_len, lease->uid, 60)
+ 		     : "<no identifier>")),
+@@ -785,9 +815,7 @@ void dhcprelease (packet, ms_nulltp)
+ 	if ((oc = lookup_option (&dhcp_universe, packet -> options,
+ 				 DHO_DHCP_REQUESTED_ADDRESS))) {
+ 		log_info ("DHCPRELEASE from %s specified requested-address.",
+-		      print_hw_addr (packet -> raw -> htype,
+-				     packet -> raw -> hlen,
+-				     packet -> raw -> chaddr));
++		      print_hw_addr_or_client_id(packet));
+ 	}
+ 
+ 	oc = lookup_option (&dhcp_universe, packet -> options,
+@@ -879,9 +907,7 @@ void dhcprelease (packet, ms_nulltp)
+ 		 "DHCPRELEASE of %s from %s %s%s%svia %s (%sfound)",
+ 		 cstr,
+ 		 (packet -> raw -> htype
+-		  ? print_hw_addr (packet -> raw -> htype,
+-				   packet -> raw -> hlen,
+-				   packet -> raw -> chaddr)
++		  ? print_hw_addr_or_client_id(packet)
+ 		  : (lease
+ 		     ? print_hex_1(lease->uid_len, lease->uid, 60)
+ 		     : "<no identifier>")),
+@@ -986,9 +1012,7 @@ void dhcpdecline (packet, ms_nulltp)
+ 		 "DHCPDECLINE of %s from %s %s%s%svia %s",
+ 		 piaddr (cip),
+ 		 (packet -> raw -> htype
+-		  ? print_hw_addr (packet -> raw -> htype,
+-				   packet -> raw -> hlen,
+-				   packet -> raw -> chaddr)
++		  ? print_hw_addr_or_client_id(packet)
+ 		  : (lease
+ 		     ? print_hex_1(lease->uid_len, lease->uid, 60)
+ 		     : "<no identifier>")),
+@@ -1732,8 +1756,7 @@ void dhcpinform (packet, ms_nulltp)
+ 	/* Report what we're sending. */
+ 	snprintf(msgbuf, sizeof msgbuf, "DHCPACK to %s (%s) via", piaddr(cip),
+ 		 (packet->raw->htype && packet->raw->hlen) ?
+-			print_hw_addr(packet->raw->htype, packet->raw->hlen,
+-				      packet->raw->chaddr) :
++			print_hw_addr_or_client_id(packet) :
+ 			"<no client hardware address>");
+ 	log_info("%s %s", msgbuf, gip.len ? piaddr(gip) :
+ 					    packet->interface->name);
+@@ -1918,9 +1941,7 @@ void nak_lease (packet, cip, network_group)
+ #endif
+ 	log_info ("DHCPNAK on %s to %s via %s",
+ 	      piaddr (*cip),
+-	      print_hw_addr (packet -> raw -> htype,
+-			     packet -> raw -> hlen,
+-			     packet -> raw -> chaddr),
++	      print_hw_addr_or_client_id(packet),
+ 	      packet -> raw -> giaddr.s_addr
+ 	      ? inet_ntoa (packet -> raw -> giaddr)
+ 	      : packet -> interface -> name);
+@@ -3936,7 +3957,7 @@ void dhcp_reply (lease)
+ 		   ? (state -> offer == DHCPACK ? "DHCPACK" : "DHCPOFFER")
+ 		   : "BOOTREPLY"),
+ 		  piaddr (lease -> ip_addr),
+-		  (lease -> hardware_addr.hlen
++		  (lease -> hardware_addr.hlen > 1
+ 		   ? print_hw_addr (lease -> hardware_addr.hbuf [0],
+ 				    lease -> hardware_addr.hlen - 1,
+ 				    &lease -> hardware_addr.hbuf [1])
+@@ -4497,10 +4518,7 @@ int find_lease (struct lease **lp,
+ 			if (uid_lease) {
+ 			    if (uid_lease->binding_state == FTS_ACTIVE) {
+ 				log_error ("client %s has duplicate%s on %s",
+-					   (print_hw_addr
+-					    (packet -> raw -> htype,
+-					     packet -> raw -> hlen,
+-					     packet -> raw -> chaddr)),
++					   (print_hw_addr_or_client_id(packet)),
+ 					   " leases",
+ 					   (ip_lease -> subnet ->
+ 					    shared_network -> name));
+@@ -4667,9 +4685,7 @@ int find_lease (struct lease **lp,
+ 			log_error("uid lease %s for client %s is duplicate "
+ 				  "on %s",
+ 				  piaddr(uid_lease->ip_addr),
+-				  print_hw_addr(packet->raw->htype,
+-						packet->raw->hlen,
+-						packet->raw->chaddr),
++				  print_hw_addr_or_client_id(packet),
+ 				  uid_lease->subnet->shared_network->name);
+ 
+ 			if (!packet -> raw -> ciaddr.s_addr &&

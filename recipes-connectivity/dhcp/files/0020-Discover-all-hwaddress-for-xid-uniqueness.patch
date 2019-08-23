@@ -1,0 +1,97 @@
+From efd1de0c2426e7d57680aab9a25f7772f7ec63dd Mon Sep 17 00:00:00 2001
+From: Pavel Zhukov <pzhukov@redhat.com>
+Date: Thu, 21 Feb 2019 10:42:50 +0100
+Subject: [PATCH] Discover all hwaddress for xid uniqueness
+
+---
+ common/discover.c |  2 ++
+ common/lpf.c      | 27 ++++++++++++++++++++++-----
+ includes/dhcpd.h  |  3 +++
+ 3 files changed, 27 insertions(+), 5 deletions(-)
+
+diff --git a/common/discover.c b/common/discover.c
+index 056342c..e66e1c5 100644
+--- a/common/discover.c
++++ b/common/discover.c
+@@ -648,6 +648,8 @@ discover_interfaces(int state) {
+ 			interface_dereference(&tmp, MDL);
+ 			tmp = interfaces; /* XXX */
+ 		}
++		if (tmp != NULL)
++			try_hw_addr(tmp);
+ 
+ 		if (dhcp_interface_discovery_hook) {
+ 			(*dhcp_interface_discovery_hook)(tmp);
+diff --git a/common/lpf.c b/common/lpf.c
+index b732a86..a708a5d 100644
+--- a/common/lpf.c
++++ b/common/lpf.c
+@@ -699,8 +699,22 @@ ioctl_get_ll(char *name)
+ 	return sll;
+ }
+ 
++// define ? 
++void try_hw_addr(struct interface_info *info){
++  get_hw_addr2(info);
++};
++
+ void
+ get_hw_addr(struct interface_info *info)
++{
++  if (get_hw_addr2(info) == ISC_R_NOTFOUND){
++    log_fatal("Unsupported device type for \"%s\"",
++              info->name);
++  }
++}
++
++isc_result_t
++get_hw_addr2(struct interface_info *info)
+ {
+ 	struct hardware *hw = &info->hw_address;
+ 	char *name = info->name;
+@@ -710,7 +724,8 @@ get_hw_addr(struct interface_info *info)
+ 	int sll_allocated = 0;
+ 	char *dup = NULL;
+ 	char *colon = NULL;
+-
++        isc_result_t result = ISC_R_SUCCESS;
++        
+ 	if (getifaddrs(&ifaddrs) == -1)
+ 		log_fatal("Failed to get interfaces");
+ 
+@@ -794,14 +809,16 @@ get_hw_addr(struct interface_info *info)
+ 			hw->hbuf[4] = 0xef;
+ 			break;
+ #endif
+-		default:
+-			freeifaddrs(ifaddrs);
+-			log_fatal("Unsupported device type %hu for \"%s\"",
+-				  sll->sll_hatype, name);
++        default:
++          log_error("Unsupported device type %hu for \"%s\"",
++                      sll->sll_hatype, name);
++          result = ISC_R_NOTFOUND;
++
+ 	}
+ 
+ 	if (sll_allocated)
+ 		dfree(sll, MDL);
+ 	freeifaddrs(ifaddrs);
++        return result;
+ }
+ #endif
+diff --git a/includes/dhcpd.h b/includes/dhcpd.h
+index 0c1a0aa..635c510 100644
+--- a/includes/dhcpd.h
++++ b/includes/dhcpd.h
+@@ -2637,7 +2637,10 @@ void print_dns_status (int, struct dhcp_ddns_cb *, isc_result_t);
+ #endif
+ const char *print_time(TIME);
+ 
++
+ void get_hw_addr(struct interface_info *info);
++void try_hw_addr(struct interface_info *info);
++isc_result_t get_hw_addr2(struct interface_info *info);
+ char *buf_to_hex (const unsigned char *s, unsigned len,
+                    const char *file, int line);
+ char *format_lease_id(const unsigned char *s, unsigned len, int format,

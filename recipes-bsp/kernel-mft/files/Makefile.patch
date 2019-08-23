@@ -1,0 +1,17 @@
+--- Makefile.orig	2019-07-15 09:20:49.822630180 -0400
++++ Makefile	2019-07-15 09:22:23.414017785 -0400
+@@ -28,7 +28,7 @@
+ endif
+ CPP = $(CC) -E
+ ifneq ($(CC),cc)
+-override WITH_MAKE_PARAMS += CC=$(CC)
++override WITH_MAKE_PARAMS += CC='$(CC)'
+ endif
+ 
+ CPP_MAJOR := $(shell $(CPP) -dumpversion 2>&1 | cut -d'.' -f1)
+@@ -70,3 +70,5 @@
+ clean:
+ 	make -C $(KSRC) M=$(PWD) clean
+ 
++modules_install:
++	$(MAKE) -C $(KERNEL_SRC) M=$(SRC) modules_install Makefile

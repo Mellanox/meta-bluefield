@@ -1,0 +1,41 @@
+--- Makefile.am.orig	2019-07-10 15:32:48.460220740 -0400
++++ Makefile.am	2019-07-10 15:37:29.723487858 -0400
+@@ -195,37 +195,7 @@
+ # If we're checked out from a Git repository, make sure that every
+ # file that is in Git is distributed.
+ ALL_LOCAL += dist-hook-git
+-dist-hook-git: distfiles
+-	@if test -e $(srcdir)/.git && (git --version) >/dev/null 2>&1; then \
+-	  (cd datapath && $(MAKE) distfiles); \
+-	  (cat distfiles; sed 's|^|datapath/|' datapath/distfiles) | \
+-	    LC_ALL=C sort -u > all-distfiles; \
+-	  (cd $(srcdir) && git ls-files) | grep -v '\.gitignore$$' | \
+-	    grep -v '\.gitattributes$$' | \
+-	    LC_ALL=C sort -u > all-gitfiles; \
+-	  LC_ALL=C comm -1 -3 all-distfiles all-gitfiles > missing-distfiles; \
+-	  if test -s missing-distfiles; then \
+-	    echo "The following files are in git but not the distribution:"; \
+-	    cat missing-distfiles; \
+-	    exit 1; \
+-	  fi; \
+-	  if LC_ALL=C grep '\.gitignore$$' all-distfiles; then \
+-	    echo "See above for list of files that are distributed but"; \
+-	    echo "should not be."; \
+-	    exit 1; \
+-	  fi \
+-	fi
+-CLEANFILES += all-distfiles all-gitfiles missing-distfiles
+-# The following is based on commands for the Automake "distdir" target.
+-distfiles: Makefile
+-	@srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
+-	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's/[].[^$$\\*]/\\\\&/g'`; \
+-	list='$(DISTFILES)'; \
+-	for file in $$list; do echo $$file; done | \
+-	  sed -e "s|^$$srcdirstrip/||;t" \
+-	      -e "s|^$$topsrcdirstrip/|$(top_builddir)/|;t" | \
+-	  LC_ALL=C sort -u > $@
+-CLEANFILES += distfiles
++dist-hook-git:
+ .PHONY: dist-hook-git
+ 
+ # Check that every .c file includes <config.h>.

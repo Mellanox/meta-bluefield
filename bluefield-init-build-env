@@ -1,0 +1,115 @@
+#!/bin/sh
+
+# Copyright (c) 2017, Mellanox Technologies
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are those
+# of the authors and should not be interpreted as representing official policies,
+# either expressed or implied, of the FreeBSD Project.
+
+# We assume you executed yocto-dependencies and then called this
+# script from the same directory.
+
+if [[ ! -d "meta-bluefield" ]]; then
+    echo "This does not appear to be the correct directory"
+    echo "to execute this script from.  Missing meta-bluefield?"
+    exit 1
+fi
+
+LAYERSDIR=$PWD
+ROOTDIR=$(dirname ${LAYERSDIR})
+VERSIONDIR=$(dirname ${ROOTDIR})
+
+TEMPLATECONF=$PWD/meta-bluefield/conf . ./poky/oe-init-build-env
+ln -sf $LAYERSDIR $LAYERSDIR/build/layers
+cd $LAYERSDIR/build
+
+OFED_PATH="${ROOTDIR}/mlnx_ofed"
+
+string=$(ls ${OFED_PATH})
+
+reOFED_VERSION='MLNX_OFED_LINUX-([[:digit:]]+\.[[:digit:]]+-[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+)-'
+
+if [[ "$string" =~ $reOFED_VERSION ]]; then
+    OFED_VERSION="${BASH_REMATCH[1]}"
+else
+    echo "cannot find OFED version"
+    exit 1
+fi
+
+reOFED_BASE_OS='-(rhel[[:digit:]]+\.[[:digit:]]+alternate)-'
+
+if [[ "$string" =~ $reOFED_BASE_OS ]]; then
+    OFED_BASE_OS="${BASH_REMATCH[1]}"
+else
+    echo "cannot find OFED base OS"
+    exit 1
+fi
+
+if [ -f "${VERSIONDIR}/bluefield_version" ]; then
+    BF_VERSION="$(cat ${VERSIONDIR}/bluefield_version)"
+fi
+
+string=$(ls ${OFED_PATH}/MLNX_OFED_LINUX-${OFED_VERSION}-${OFED_BASE_OS}-aarch64/RPMS)
+
+reMFT_VERSION='mft*-([[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\-[[:digit:]]+)\.arm64.rpm'
+
+if [[ "$string" =~ $reMFT_VERSION ]]; then
+    MFT_VERSION="${BASH_REMATCH[1]}"
+else
+    echo "cannot find MFT version"
+    exit 1
+fi
+
+OFED_SRC_PATH="${OFED_PATH}/MLNX_OFED_SRC-${OFED_VERSION}"
+MFT_PATH="${OFED_PATH}/MLNX_OFED_LINUX-${OFED_VERSION}-${OFED_BASE_OS}-aarch64/RPMS"
+
+sed -i \
+    -e "/^# MLNX_OFED_VERSION /s,.*,MLNX_OFED_VERSION = \"${OFED_VERSION}\"," conf/local.conf
+
+sed -i \
+    -e "/^# MLNX_OFED_BASE_OS /s,.*,MLNX_OFED_BASE_OS = \"${OFED_BASE_OS}\"," conf/local.conf
+
+sed -i \
+    -e "/^# MLNX_OFED_PATH /s,.*,MLNX_OFED_PATH = \"${OFED_PATH}\"," conf/local.conf
+
+sed -i \
+    -e "/^# OFED_SRC_PATH /s,.*,OFED_SRC_PATH = \"${OFED_SRC_PATH}\"," conf/local.conf
+
+sed -i \
+    -e "/^# MFT_PATH /s,.*,MFT_PATH = \"${MFT_PATH}\"," conf/local.conf
+
+sed -i \
+    -e "/^# MFT_VERSION /s,.*,MFT_VERSION = \"${MFT_VERSION}\"," conf/local.conf
+
+sed -i \
+    -e "/^# MLNX_BLUEFIELD_FW_PATH /s,.*,MLNX_BLUEFIELD_FW_PATH = \"${ROOTDIR}/mlnx_fw\"," conf/local.conf
+
+if [ -n "${BF_VERSION}" ]; then
+    sed -i \
+        -e "/^# MLNX_BLUEFIELD_VERSION /s,.*,MLNX_BLUEFIELD_VERSION = \"${BF_VERSION}\"," conf/local.conf
+fi
+
+sed -i \
+    -e "/^# MLNX_BLUEFIELD_EXTRA_DEV_PATH /s,.*,MLNX_BLUEFIELD_EXTRA_DEV_PATH = \"${ROOTDIR}/mlnx_extra_dev\"," conf/local.conf
+

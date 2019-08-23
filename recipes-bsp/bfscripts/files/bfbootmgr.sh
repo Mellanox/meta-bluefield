@@ -1,0 +1,222 @@
+#!/bin/sh
+
+# Copyright (c) 2017, Mellanox Technologies
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are those
+# of the authors and should not be interpreted as representing official policies,
+# either expressed or implied, of the FreeBSD Project.
+
+set -e
+
+PROGNAME=$(basename "$0")
+
+usage()
+{
+    cat <<EOF
+Usage:    $PROGNAME COMMAND [PARAMS]
+
+COMMAND list:
+    --help                          : print help.
+    --add <DISTRO> <KERNEL> <ARGS>  : create a new boot entry.
+    --cleanall                      : delete all boot entires.
+    --force <shell|pxe|default> [p] : boot override; if 'p' is
+                                      used then the boot order
+                                      would be persistent across
+                                      reboots.
+EOF
+}
+
+add=
+cleanall=
+force=
+option=0
+
+PARSED_OPTIONS=`getopt -n "$PROGNAME" -o h \
+                    -l help,add,cleanall,force -- "$@"`
+eval set -- "$PARSED_OPTIONS"
+
+while true
+do
+  case $1 in
+      -h | --help)
+          usage
+          ;;
+      -a | --add)
+          add=1
+          option=$(($option+1))
+          shift
+          ;;
+      -c | --cleanall)
+          cleanall=1
+          option=$(($option+1))
+          shift
+          ;;
+      -f | --force)
+          force=1
+          option=$(($option+1))
+          shift
+          ;;
+      --)
+          shift
+          break
+          ;;
+  esac
+done
+
+# Check arguments. For now, a single option is implemented at a time.
+if [ $option -ne 1 ]; then
+    echo "Cannot support multiple options!"
+    usage
+    exit 1
+fi
+
+# This script requires that the kernel supports access to EFI non-volatile
+# variables. The UEFI system requires several kernel configuration options.
+# Since this script might be used after booting with initramfs only, we
+# prefer to not enable those EFI configurations options. Alternatively, we
+# use the efivarfs (EFI VARiable File System) interface (CONFIG_EFIVAR_FS)
+# mounted using efivarfs kernel module at /sys/firmware/efi/efivars to
+# remove EFI variables.
+
+efivars=/sys/firmware/efi/efivars
+
+boot_cleanall()
+{
+    # First check whether boot order array variable is present and has
+    # boot options
+    boot_order=$(efibootmgr | grep BootOrder)
+    if [ "$(echo "$boot_order" | cut -f1 -d':')" = "BootOrder" ]; then
+        options=$(echo "$boot_order" | cut -f2 -d':' | sed -e 's/,/ /g')
+        if [ -n "$options" ]; then
+            # Clear boot options
+            for opt in $options; do
+                efibootmgr -b "$opt" -B
+            done
+        fi
+    fi
+
+    # Second round: there might be old boot entries not part of the
+    # boot order array. Those entries might be installed after firmware
+    # recovery. Boot entries are formatted as BootXXXX where XXXX refer
+    # to an hexadecimal number. Thus extract that number only.
+    options=$(efibootmgr | grep -F "*" | cut -f1 -d'*' | cut -c5-)
+    # Check whether extra boot entries exist.
+    if [ -n "$options" ]; then
+        # Clear boot options
+        for opt in $options; do
+            efibootmgr -b "$opt" -B
+        done
+    fi
+}
+
+boot_add()
+{
+    # Read parameters.
+    distro="$1"
+    kernel="$2"
+    bootargs="$3"
+
+    # Set default parameters
+    disk="/dev/mmcblk0"
+    part="1"
+
+    # Create the boot entry.
+    echo "Distro      : $distro"
+    echo "Kernel Image: $kernel"
+    echo "Command line: $bootargs"
+    efibootmgr -c -d $disk -p $part -l "$kernel" -L "$distro" -u "$bootargs"
+}
+
+boot_override()
+{
+    cd $efivars
+
+    # Read parameters
+    select="$1"
+    persist="$2"
+
+    # Set the BlueField boot override variable.
+    # The efivarfs (EFI VARiable File System) contains files whose names are
+    # built from the UEFI variables name and GUID. All architecturally defined
+    # variables use the EFI_GLOBAL_VARIABLE GUID
+    # 0x8BE4DF61,0x93CA,0x11D2,0xAA,0xOD,0x00,0xE0,0x98,0x03,0x2B,0x8C.
+    var=BfBootOverride-8be4df61-93ca-11d2-aa0d-00e098032b8c
+
+    [[ -e "$var" ]] && chattr -i $var
+
+    if [ "$select" == "pxe" ]; then
+        data="01"
+    elif [ "$select" == "shell" ]; then
+        data="02"
+    elif [ "$select" == "default" ]; then
+        [[ -e "$var" ]] && (echo "Deleting $var"; rm $var)
+        exit 0
+    else
+        echo "Bad Boot Selection $select!"
+        return 1
+    fi
+
+    if [ -n "$persist" ]; then
+        data="$data\x01"
+    else
+        data="$data\x00"
+    fi
+
+    # Set the BlueField boot override variable.
+    printf "\x07\x00\x00\x00\x$data" > $var
+}
+
+# Linux kernel exposes EFI variables data to userspace via efivarfs
+# interface. Thus mount it, if needed.
+test "$(ls -A $efivars)" || mount -t efivarfs none $efivars
+
+# Clean up boot options using 'efibootmgr'.
+[[ -n "$cleanall" ]] && (boot_cleanall; exit $?)
+
+# Add boot option
+if [ -n "$add" ]; then
+    # Check arguments
+    if [ $# -lt 3 ]; then
+        echo "$PROGNAME: invalid operand(s)"
+        echo "Try: $PROGNAME --add <DISTRO> <KERNEL> <ARGS>"
+        exit 1
+    fi
+    boot_add $1 $2 $3
+    exit $?
+fi
+
+if [ -n "$force" ]; then
+    # Check arguments
+    if [ $# -lt 1 ]; then
+        echo "$PROGNAME: invalid operand(s)"
+        echo "Try: $PROGNAME --force <shell|pxe|default> [p]"
+        exit 1
+    fi
+    if [ -n "$2" ] && [ "$2" != "p" ]; then
+        echo "$PROGNAME: invalid option $2, did you mean 'p'?"
+        exit 1
+    fi
+    boot_override $1 $2
+    exit $?
+fi

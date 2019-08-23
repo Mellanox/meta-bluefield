@@ -1,0 +1,563 @@
+MLNX-PMC-MIB DEFINITIONS ::= BEGIN
+
+--
+-- The MIB module for performance monitoring counters
+--
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, Unsigned32, Counter64,
+    enterprises          FROM SNMPv2-SMI
+    DisplayString        FROM SNMPv2-TC
+    OBJECT-GROUP         FROM SNMPv2-CONF;
+
+
+mlnxPmcMib MODULE-IDENTITY
+    LAST-UPDATED "201810010000Z"
+    ORGANIZATION "Mellanox Technologies LTD
+                  www.mellanox.com"
+    CONTACT-INFO
+        "contact:  Sagi Rotem
+        email:    sagir@mellanox.co.il"
+    DESCRIPTION
+        "MIB objects for performance monitoring module"
+    REVISION     "201810010000Z"
+    DESCRIPTION
+        "First draft"
+    REVISION     "201811070000Z"
+    DESCRIPTION
+        "Final version"
+    ::= { enterprises 33049 }
+
+
+--
+-- top level structure
+--
+mlnxPmcTables       OBJECT IDENTIFIER ::= { mlnxPmcMib 1 }
+mlnxPmcTableGroup   OBJECT IDENTIFIER ::= { mlnxPmcMib 2 }
+mlnxPmcScalars      OBJECT IDENTIFIER ::= { mlnxPmcMib 3 }
+mlnxPmcScalarGroup  OBJECT IDENTIFIER ::= { mlnxPmcMib 4 }
+
+--
+-- Mss Table
+--
+
+mlnxPmcMssTable OBJECT-TYPE
+    SYNTAX     SEQUENCE OF MlnxPmcMssEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The (conceptual) table listing the Mss
+            performance counters."
+    ::= { mlnxPmcTables 1 }
+
+mlnxPmcMssEntry OBJECT-TYPE
+    SYNTAX     MlnxPmcMssEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "An entry (conceptual row) in the mlnxPmcMssTable."
+    INDEX      { mlnxPmcMssIndex }
+    ::= { mlnxPmcMssTable 1 }
+
+MlnxPmcMssEntry ::= SEQUENCE {
+    mlnxPmcMssIndex     Unsigned32,
+    mlnxPmcMssBlockId   Unsigned32,
+    mlnxPmcMssCounterId Unsigned32,
+    mlnxPmcMssEvent     DisplayString,
+    mlnxPmcMssCounters  Counter64
+}
+
+mlnxPmcMssIndex OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The auxiliary variable used for identifying instances
+            of the columnar objects in the mlnxPmcMssTable."
+    ::= { mlnxPmcMssEntry 1 }
+
+mlnxPmcMssBlockId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter's block ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcMssEntry 2 }
+
+mlnxPmcMssCounterId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcMssEntry 3 }
+
+mlnxPmcMssEvent OBJECT-TYPE
+    SYNTAX     DisplayString
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "A textual description of event type."
+    ::= { mlnxPmcMssEntry 4 }
+
+mlnxPmcMssCounters OBJECT-TYPE
+    SYNTAX     Counter64
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Performance counter's value."
+    ::= { mlnxPmcMssEntry 5 }
+
+mlnxPmcMssGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcMssBlockId, mlnxPmcMssCounterId, mlnxPmcMssEvent, mlnxPmcMssCounters }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Mss counters."
+    ::= { mlnxPmcTableGroup 1 }
+
+mlnxPmcMssBlockIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set block ID for Mss counter's configuration."
+    ::= { mlnxPmcScalars 1 }
+
+mlnxPmcMssCounterIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set counter ID for Mss counter's configuration."
+    ::= { mlnxPmcScalars 2 }
+
+mlnxPmcMssEventIdSet OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set event for Mss counter's configuration."
+    ::= { mlnxPmcScalars 3 }
+
+mlnxPmcMssScalarGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcMssBlockIdSet, mlnxPmcMssCounterIdSet, mlnxPmcMssEventIdSet }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Mss counters."
+    ::= { mlnxPmcScalarGroup 1 }
+
+--
+-- Pcie Table
+--
+
+mlnxPmcPcieTable OBJECT-TYPE
+    SYNTAX     SEQUENCE OF MlnxPmcPcieEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The (conceptual) table listing the Pcie
+            performance counters."
+    ::= { mlnxPmcTables 2 }
+
+mlnxPmcPcieEntry OBJECT-TYPE
+    SYNTAX     MlnxPmcPcieEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "An entry (conceptual row) in the mlnxPmcPcieTable."
+    INDEX      { mlnxPmcPcieIndex }
+    ::= { mlnxPmcPcieTable 1 }
+
+MlnxPmcPcieEntry ::= SEQUENCE {
+    mlnxPmcPcieIndex     Unsigned32,
+    mlnxPmcPcieBlockId   Unsigned32,
+    mlnxPmcPcieEvent     DisplayString,
+    mlnxPmcPcieCounters  Counter64
+}
+
+mlnxPmcPcieIndex OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The auxiliary variable used for identifying instances
+            of the columnar objects in the mlnxPmcPcieTable."
+    ::= { mlnxPmcPcieEntry 1 }
+
+mlnxPmcPcieBlockId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter's group ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcPcieEntry 2 }
+
+mlnxPmcPcieEvent OBJECT-TYPE
+    SYNTAX     DisplayString
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "A textual description of event type."
+    ::= { mlnxPmcPcieEntry 3 }
+
+mlnxPmcPcieCounters OBJECT-TYPE
+    SYNTAX     Counter64
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Performance counter's value."
+    ::= { mlnxPmcPcieEntry 4 }
+
+mlnxPmcPcieGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcPcieBlockId, mlnxPmcPcieEvent, mlnxPmcPcieCounters }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Pcie counters."
+    ::= { mlnxPmcTableGroup 2 }
+
+--
+-- Tile Table
+--
+
+mlnxPmcTileTable OBJECT-TYPE
+    SYNTAX     SEQUENCE OF MlnxPmcTileEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The (conceptual) table listing the Tile
+            performance counters."
+    ::= { mlnxPmcTables 3 }
+
+mlnxPmcTileEntry OBJECT-TYPE
+    SYNTAX     MlnxPmcTileEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "An entry (conceptual row) in the mlnxPmcTileTable."
+    INDEX      { mlnxPmcTileIndex }
+    ::= { mlnxPmcTileTable 1 }
+
+MlnxPmcTileEntry ::= SEQUENCE {
+    mlnxPmcTileIndex     Unsigned32,
+    mlnxPmcTileBlockId   Unsigned32,
+    mlnxPmcTileCounterId Unsigned32,
+    mlnxPmcTileEvent     DisplayString,
+    mlnxPmcTileCounters  Counter64
+}
+
+mlnxPmcTileIndex OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The auxiliary variable used for identifying instances
+            of the columnar objects in the mlnxPmcTileTable."
+    ::= { mlnxPmcTileEntry 1 }
+
+mlnxPmcTileBlockId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter's block ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcTileEntry 2 }
+
+mlnxPmcTileCounterId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcTileEntry 3 }
+
+mlnxPmcTileEvent OBJECT-TYPE
+    SYNTAX     DisplayString
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "A textual description of event type."
+    ::= { mlnxPmcTileEntry 4 }
+
+mlnxPmcTileCounters OBJECT-TYPE
+    SYNTAX     Counter64
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Performance counter's value."
+    ::= { mlnxPmcTileEntry 5 }
+
+mlnxPmcTileGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcTileBlockId, mlnxPmcTileCounterId, mlnxPmcTileEvent, mlnxPmcTileCounters }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Tile counters."
+    ::= { mlnxPmcTableGroup 3 }
+
+mlnxPmcTileBlockIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set block ID for Tile counter's configuration."
+    ::= { mlnxPmcScalars 4 }
+
+mlnxPmcTileCounterIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set counter ID for Tile counter's configuration."
+    ::= { mlnxPmcScalars 5 }
+
+mlnxPmcTileEventIdSet OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set event for Tile counter's configuration."
+    ::= { mlnxPmcScalars 6 }
+
+mlnxPmcTileScalarGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcTileBlockIdSet, mlnxPmcTileCounterIdSet, mlnxPmcTileEventIdSet }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Tile counters."
+    ::= { mlnxPmcScalarGroup 2 }
+
+--
+-- Trio Table
+--
+
+mlnxPmcTrioTable OBJECT-TYPE
+    SYNTAX     SEQUENCE OF MlnxPmcTrioEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The (conceptual) table listing the Trio
+            performance counters."
+    ::= { mlnxPmcTables 4 }
+
+mlnxPmcTrioEntry OBJECT-TYPE
+    SYNTAX     MlnxPmcTrioEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "An entry (conceptual row) in the mlnxPmcTrioTable."
+    INDEX      { mlnxPmcTrioIndex }
+    ::= { mlnxPmcTrioTable 1 }
+
+MlnxPmcTrioEntry ::= SEQUENCE {
+    mlnxPmcTrioIndex     Unsigned32,
+    mlnxPmcTrioBlockId   Unsigned32,
+    mlnxPmcTrioCounterId Unsigned32,
+    mlnxPmcTrioEvent     DisplayString,
+    mlnxPmcTrioCounters  Counter64
+}
+
+mlnxPmcTrioIndex OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The auxiliary variable used for identifying instances
+            of the columnar objects in the mlnxPmcTrioTable."
+    ::= { mlnxPmcTrioEntry 1 }
+
+mlnxPmcTrioBlockId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter's block ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcTrioEntry 2 }
+
+mlnxPmcTrioCounterId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcTrioEntry 3 }
+
+mlnxPmcTrioEvent OBJECT-TYPE
+    SYNTAX     DisplayString
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "A textual description of event type."
+    ::= { mlnxPmcTrioEntry 4 }
+
+mlnxPmcTrioCounters OBJECT-TYPE
+    SYNTAX     Counter64
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Performance counter's value."
+    ::= { mlnxPmcTrioEntry 5 }
+
+mlnxPmcTrioGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcTrioBlockId, mlnxPmcTrioCounterId, mlnxPmcTrioEvent, mlnxPmcTrioCounters }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Trio counters."
+    ::= { mlnxPmcTableGroup 4 }
+
+mlnxPmcTrioBlockIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set block ID for Trio counter's configuration."
+    ::= { mlnxPmcScalars 7 }
+
+mlnxPmcTrioCounterIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set counter ID for Trio counter's configuration."
+    ::= { mlnxPmcScalars 8 }
+
+mlnxPmcTrioEventIdSet OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set event for Trio counter's configuration."
+    ::= { mlnxPmcScalars 9 }
+
+mlnxPmcTrioScalarGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcTrioBlockIdSet, mlnxPmcTrioCounterIdSet, mlnxPmcTrioEventIdSet }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Trio counters."
+    ::= { mlnxPmcScalarGroup 3 }
+
+--
+-- Triogen Table
+--
+
+mlnxPmcTriogenTable OBJECT-TYPE
+    SYNTAX     SEQUENCE OF MlnxPmcTriogenEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The (conceptual) table listing the Triogen
+            performance counters."
+    ::= { mlnxPmcTables 5 }
+
+mlnxPmcTriogenEntry OBJECT-TYPE
+    SYNTAX     MlnxPmcTriogenEntry
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "An entry (conceptual row) in the mlnxPmcTriogenTable."
+    INDEX      { mlnxPmcTriogenIndex }
+    ::= { mlnxPmcTriogenTable 1 }
+
+MlnxPmcTriogenEntry ::= SEQUENCE {
+    mlnxPmcTriogenIndex     Unsigned32,
+    mlnxPmcTriogenBlockId   Unsigned32,
+    mlnxPmcTriogenCounterId Unsigned32,
+    mlnxPmcTriogenEvent     DisplayString,
+    mlnxPmcTriogenCounters  Counter64
+}
+
+mlnxPmcTriogenIndex OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS not-accessible
+    STATUS     current
+    DESCRIPTION
+            "The auxiliary variable used for identifying instances
+            of the columnar objects in the mlnxPmcTriogenTable."
+    ::= { mlnxPmcTriogenEntry 1 }
+
+mlnxPmcTriogenBlockId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter's group ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcTriogenEntry 2 }
+
+mlnxPmcTriogenCounterId OBJECT-TYPE
+    SYNTAX     Unsigned32
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Counter's group ID."
+    DEFVAL { 0 }
+    ::= { mlnxPmcTriogenEntry 3 }
+
+mlnxPmcTriogenEvent OBJECT-TYPE
+    SYNTAX     DisplayString
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "A textual description of event type."
+    ::= { mlnxPmcTriogenEntry 4 }
+
+mlnxPmcTriogenCounters OBJECT-TYPE
+    SYNTAX     Counter64
+    MAX-ACCESS read-only
+    STATUS     current
+    DESCRIPTION
+            "Performance counter's value."
+    ::= { mlnxPmcTriogenEntry 5 }
+
+mlnxPmcTriogenGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcTriogenBlockId, mlnxPmcTriogenCounterId, mlnxPmcTriogenEvent, mlnxPmcTriogenCounters }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Triogen counters."
+    ::= { mlnxPmcTableGroup 5 }
+
+mlnxPmcTriogenBlockIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set block ID for Trio counter's configuration."
+    ::= { mlnxPmcScalars 10 }
+
+mlnxPmcTriogenCounterIdSet OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set counter ID for Trio counter's configuration."
+    ::= { mlnxPmcScalars 11 }
+
+mlnxPmcTriogenEventIdSet OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+            "Value to set event for Trio counter's configuration."
+    ::= { mlnxPmcScalars 12 }
+
+mlnxPmcTriogenScalarGroup OBJECT-GROUP
+    OBJECTS { mlnxPmcTriogenBlockIdSet, mlnxPmcTriogenCounterIdSet, mlnxPmcTriogenEventIdSet }
+    STATUS  current
+    DESCRIPTION
+            "The group defines objects which are common to all
+            Triogen counters."
+    ::= { mlnxPmcScalarGroup 4 }
+
+END

@@ -1,0 +1,24 @@
+From 4d7301995cf8c83d3ad55fcafdb05bd2b60c2507 Mon Sep 17 00:00:00 2001
+From: Pavel Zhukov <pzhukov@redhat.com>
+Date: Thu, 21 Feb 2019 10:28:13 +0100
+Subject: [PATCH] Fix 'garbage in format string' error
+
+RHBZ: 450042
+
+---
+ common/tables.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/common/tables.c b/common/tables.c
+index c1aa214..d2294c0 100644
+--- a/common/tables.c
++++ b/common/tables.c
+@@ -215,7 +215,7 @@ static struct option dhcp_options[] = {
+ 	{ "name-service-search", "Sa",		&dhcp_universe, 117, 1 },
+ #endif
+ 	{ "subnet-selection", "I",		&dhcp_universe, 118, 1 },
+-	{ "domain-search", "Dc",		&dhcp_universe, 119, 1 },
++	{ "domain-search", "D",			&dhcp_universe, 119, 1 },
+ 	{ "vivco", "Evendor-class.",		&dhcp_universe, 124, 1 },
+ 	{ "vivso", "Evendor.",			&dhcp_universe, 125, 1 },
+ #if 0

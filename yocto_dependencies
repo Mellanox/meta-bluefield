@@ -1,0 +1,196 @@
+#!/bin/sh -x
+
+# Copyright (c) 2018, Mellanox Technologies
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are those
+# of the authors and should not be interpreted as representing official policies,
+# either expressed or implied, of the FreeBSD Project.
+
+# This script creates/updates all meta-bluefield
+# yocto meta layer dependencies.
+
+set -e
+
+# The meta-bluefield layer depends on the following meta-layers.
+# The build process treats these layers as "read only".
+# If you find yourself wanting to modify these layers...
+# append or update the recipe in meta-bluefield instead.
+# You might consider upstreaming your change to the "official"
+# repo so at some point in the future you can then remove the
+# change from meta-bluefield.  Depends on the nature of the
+# change, of course.
+
+#
+# Current poky release/branch is "sumo" (Yocto release 2.5).
+# Most other meta layers will have a branch the same name as
+# the poky branch so you will want to be consistent and sync
+# all meta layers to whatever branch you use in poky. If you
+# don't do this you will almost certainly have build issues.
+#
+
+git_branch()
+{
+    metalayer=$1
+    branch=$2
+
+    cd "$metalayer"
+    git_output=$(git symbolic-ref --short HEAD)
+    if [ "$git_output" != "$branch" ]; then
+        git fetch --all
+        git checkout origin/$branch
+        git checkout -B "$branch"
+        git branch --set-upstream-to=origin/"$branch"
+    fi
+    cd ..
+}
+
+git_reset()
+{
+    metalayer=$1
+    commithash=$2
+
+    cd "$metalayer"
+    git_output=$(git rev-parse HEAD)
+    if [ "$git_output" != "$commithash" ]; then
+        git fetch --all
+        git reset --hard "$commithash"
+    fi
+    cd ..
+}
+
+usage()
+{
+  cat <<EOF
+Usage: $0 [--help] [dir]
+EOF
+}
+
+PARSED_OPTIONS=$(getopt -n "$0"  -o h --long "help" -- "$@")
+
+eval set -- "$PARSED_OPTIONS"
+
+while true
+do
+  case "$1" in
+
+    -h|--help)
+          usage
+          exit 0
+          ;;
+    --)
+      shift
+      break
+      ;;
+  esac
+done
+
+if [ $# -eq 0 ]; then
+    echo "No directory provided: using ./"
+    dir="./"
+elif [ $# -ne 1 ]; then
+    echo "Too many arguments"
+    exit 1
+else
+    dir=$1
+fi
+
+if [ ! -e "$dir" ]; then
+    mkdir -p "$dir"
+elif [ ! -d "$dir" ]; then
+    echo "$dir is not a directory"
+    exit 1
+fi
+
+cd "$dir"
+
+############################################################
+
+if [ -e poky ]; then
+    if [ ! -d "poky" ]; then
+        echo "poky is not a directory"
+        exit 1
+    fi
+fi
+
+if [ ! -e poky ]; then
+    git clone https://git.yoctoproject.org/git/poky
+fi
+
+if [ -e meta-openembedded ]; then
+    if [ ! -d "meta-openembedded" ]; then
+        echo "meta-openembedded is not a directory"
+        exit 1
+    fi
+fi
+
+if [ ! -e meta-openembedded ]; then
+    git clone https://github.com/openembedded/meta-openembedded
+fi
+
+if [ ! -e meta-virtualization ]; then
+    git clone https://git.yoctoproject.org/git/meta-virtualization
+elif [ ! -d "meta-virtualization" ]; then
+    echo "meta-virtualization is not a directory"
+    exit 1
+fi
+
+if [ ! -e meta-linaro ]; then
+    git clone https://git.linaro.org/openembedded/meta-linaro.git
+elif [ ! -d "meta-linaro" ]; then
+    echo "meta-linaro is not a directory"
+    exit 1
+fi
+
+if [ ! -e meta-secure-core ]; then
+    git clone https://github.com/jiazhang0/meta-secure-core.git
+elif [ ! -d "meta-secure-core" ]; then
+    echo "meta-secure-core is not a directory"
+    exit 1
+fi
+
+if [ ! -e meta-cloud-services ]; then
+    git clone https://git.yoctoproject.org/git/meta-cloud-services
+elif [ ! -d "meta-cloud-services" ]; then
+    echo "meta-cloud-services is not a directory"
+    exit 1
+fi
+
+git_branch poky warrior
+git_reset poky 38d5c8ea98cfa49825c473eba8984c12edf062be
+
+git_branch meta-openembedded warrior
+git_reset meta-openembedded 6fa72d587aab8e9d56d67a2552eb9cfbe25c86d2
+
+git_branch meta-virtualization warrior
+git_reset meta-virtualization 2c6f451aa2b954c0cab2052d4f4635618050f648
+
+git_branch meta-linaro warrior
+git_reset meta-linaro c38fb78fd1eb3883f2a8199c2d21358f4a412fb4
+
+# there is no specific warrior branch
+git_branch meta-secure-core master
+git_reset meta-secure-core 8fc7d850d7e655ec14d8cbea29663f5eda6a6d89
+
+git_branch meta-cloud-services warrior
+git_reset meta-cloud-services 43ca2e54a87be30b718654e0e47d57605d841237

@@ -1,0 +1,46 @@
+#! /bin/sh
+
+# Helper script used to bring up and configure Infiniband interfaces.
+
+LIB_IB=/lib/modules/`uname -r`/updates/drivers/infiniband/
+
+# Verify whether the IPoIB module is present.
+[ ! -f "$LIB_IB/ulp/ipoib/ib_ipoib.ko" ] && exit 0
+
+# Load the IPoIB module, if needed.
+[[ $(lsmod | grep ib_ipoib) ]] && modprobe ib_ipoib
+
+# Lookup the actual kernel interfaces, and bring up the corresponding
+# network interfaces.
+find /sys/class/net -name ib* | while read i; do
+    interface=$(basename $i)
+    # Bring up the network interface if the link is down
+    status=$(cat /sys/class/net/$interface/carrier)
+    [ "$status" == "0" ] && ifconfig $interface up
+done
+
+# Verify whether the network interface configuration file is present.
+[ ! -f "/etc/network/interfaces" ] && exit 0
+
+# Setup Infiniband interfaces when dhcp configuration is required.
+# Parse '/etc/network/interfaces' to find out the enabled network
+# interfaces and call dhclient if the device address is missing.
+
+# Read the list of network interfaces with dhcp configuration
+interfaces=$(grep dhcp /etc/network/interfaces | grep ib | cut -f2 -d' ')
+
+for i in $interfaces; do
+    # Check whether the kernel interface is present.
+    if [ ! -d "/sys/class/net/$i" ]; then
+        continue
+    fi
+
+    # Determine the requested address format, whether v4 or v6.
+    proto=$(grep dhcp /etc/network/interfaces | grep $i | cut -f3 -d' ')
+
+    # Verify whether the address is set. Otherwise invoke 'dhclient'.
+    addr=$(ifconfig $i | grep "$proto addr")
+    if [ -z "$addr" ]; then
+            /sbin/dhclient $i 2>/dev/null
+    fi
+done

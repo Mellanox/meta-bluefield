@@ -1,0 +1,6 @@
+[Match]
+Driver=mlx*
+Name=!ib*
+
+[Network]
+DHCP=yes

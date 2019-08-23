@@ -1,0 +1,1 @@
+SUBSYSTEM=="module", ACTION=="add", KERNEL=="ipmi_devintf", RUN+="/etc/udev/scripts/ipmi.init.dev"

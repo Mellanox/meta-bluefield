@@ -1,0 +1,11 @@
+[Unit]
+Description=Mellanox SNMP Subagent.
+After=syslog.target network.target
+
+[Service]
+Type=simple
+Environment=OPTIONS="-LO7 -m MLNX-PMC-MIB"
+ExecStart=/usr/sbin/mlnx_snmp_subagent -f
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+From 2ba031d86844a2730da06480c54dae2baf24ecf1 Mon Sep 17 00:00:00 2001
+From: Pavel Zhukov <pzhukov@redhat.com>
+Date: Thu, 21 Feb 2019 10:41:14 +0100
+Subject: [PATCH] dhclient: write DUID_LLT even in stateless mode (#1156356)
+
+(Submitted to dhcp-bugs@isc.org - [ISC-Bugs #38144])
+
+---
+ client/dhclient.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/client/dhclient.c b/client/dhclient.c
+index 27fde69..4e5546a 100644
+--- a/client/dhclient.c
++++ b/client/dhclient.c
+@@ -1442,6 +1442,9 @@ void run_stateless(int exit_mode, u_int16_t port)
+ 			data_string_forget(&default_duid, MDL);
+ 
+ 		form_duid(&default_duid, MDL);
++		if (form_duid(&default_duid, MDL) == ISC_R_SUCCESS &&
++		    duid_type == DUID_LLT)
++			write_duid(&default_duid);
+ 	}
+ 
+ #ifdef DHCP4o6

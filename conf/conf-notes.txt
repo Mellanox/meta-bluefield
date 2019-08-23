@@ -1,0 +1,13 @@
+
+### Mellanox shell environment set up for builds. ###
+
+You can now run 'bitbake <target>'
+
+Common targets are:
+    core-image-initramfs
+    core-image-initramfs-netboot
+    core-image-full
+    core-image-full-dev
+    core-image-full-sdk
+
+To build the extensible SDK run 'bitbake core-image-full-sdk -c populate_sdk_ext'.

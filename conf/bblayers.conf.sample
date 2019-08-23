@@ -1,0 +1,28 @@
+# POKY_BBLAYERS_CONF_VERSION is increased each time build/conf/bblayers.conf
+# changes incompatibly
+POKY_BBLAYERS_CONF_VERSION = "2"
+
+BBPATH = "${TOPDIR}"
+BBFILES ?= ""
+
+BBLAYERS ?= " \
+  ${TOPDIR}/layers/poky/meta \
+  ${TOPDIR}/layers/poky/meta-poky \
+  ${TOPDIR}/layers/poky/meta-yocto-bsp \
+  ${TOPDIR}/layers/meta-openembedded/meta-oe \
+  ${TOPDIR}/layers/meta-openembedded/meta-python \
+  ${TOPDIR}/layers/meta-openembedded/meta-networking \
+  ${TOPDIR}/layers/meta-openembedded/meta-filesystems \
+  ${TOPDIR}/layers/meta-openembedded/meta-perl \
+  ${TOPDIR}/layers/meta-openembedded/meta-initramfs \
+  ${TOPDIR}/layers/meta-openembedded/meta-webserver \
+  ${TOPDIR}/layers/meta-virtualization \
+  ${TOPDIR}/layers/meta-linaro/meta-linaro \
+  ${TOPDIR}/layers/meta-linaro/meta-linaro-integration \
+  ${TOPDIR}/layers/meta-secure-core/meta \
+  ${TOPDIR}/layers/meta-secure-core/meta-efi-secure-boot \
+  ${TOPDIR}/layers/meta-secure-core/meta-signing-key \
+  ${TOPDIR}/layers/meta-cloud-services \
+  ${TOPDIR}/layers/meta-cloud-services/meta-openstack \
+  ${TOPDIR}/layers/meta-bluefield \
+  "

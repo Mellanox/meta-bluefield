@@ -1,0 +1,88 @@
+#!/bin/sh
+
+# Copyright (c) 2017, Mellanox Technologies
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and documentation are those
+# of the authors and should not be interpreted as representing official policies,
+# either expressed or implied, of the FreeBSD Project.
+
+#
+# Read the core PLL register to calculate the core clock frequency
+#
+
+if [ ! -d /dev/mst ]; then
+	mst start
+fi
+
+BF1_PLATFORM_ID=0x00000211
+BF2_PLATFORM_ID=0x00000214
+
+is_livefish=false
+
+mst_device="/dev/mst/mt41682_pciconf0"
+if [ ! -c "$mst_device" ]; then
+	mst_device="/dev/mst/bf-livefish"
+	is_livefish=true
+fi
+
+bfversion=$(mcra $mst_device 0xf0014)
+
+if [ $bfversion == $BF1_PLATFORM_ID ]; then
+
+	padfreq=156.25 # MHz
+
+	if [ $is_livefish == true ]; then
+		echo "core freq = ${padfreq}MHz"
+		exit
+	fi
+
+	F=$(($(mcra $mst_device 0x1c0384.3:13)))
+	R=$(($(mcra $mst_device 0x1c0384.20:6)))
+	OD=$(($(mcra $mst_device 0x1c0384.16:4)))
+
+	# F= padfreq*(F+1)/((R+1)*(OD+1))
+	freq=$(echo "$F 1 + $padfreq * $R 1 + / $OD 1 + / p"  | dc)
+
+	echo "core freq = ${freq}MHz"
+
+elif [ $bfversion == $BF2_PLATFORM_ID ]; then
+
+	padfreq=200 # MHz
+
+	if [ $is_livefish == true ]; then
+		echo "core freq = ${padfreq}MHz"
+		exit
+	fi
+
+	F=$(($(mcra $mst_device 0xf0f90.0:26)))
+	R=$(($(mcra $mst_device 0xf0f90.26:6)))
+	OD=$(($(mcra $mst_device 0xf0f94.1:4)))
+
+	# F= padfreq*(F/16384)/(R+1)/(OD+1)
+	freq=$(echo "$F $padfreq * 16384 / $R 1 + / $OD 1 + / p"  | dc)
+
+	echo "core freq = ${freq}MHz"
+else
+	echo "Unknown platform, unable to get the cpu frequency"
+fi

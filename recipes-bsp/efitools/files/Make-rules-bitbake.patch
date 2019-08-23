@@ -1,0 +1,25 @@
+From d7ae913347f6d6343366d65d423560aae2214105 Mon Sep 17 00:00:00 2001
+From: OpenEmbedded <oe.patch@oe>
+Date: Mon, 15 Jul 2019 12:42:56 +0000
+
+---
+ Make.rules | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/Make.rules b/Make.rules
+index 5d2ad20..c5b2048 100644
+--- a/Make.rules
++++ b/Make.rules
+@@ -27,9 +27,9 @@ LDSCRIPT	= elf_$(ARCH)_efi.lds
+ ldflags		+= -shared -Bsymbolic $(CRTOBJS) -L $(CRTPATH) -T $(LDSCRIPT)
+ LOADLIBES	= -lefi -lgnuefi $(shell $(CC) $(ARCH3264) -print-libgcc-file-name)
+ FORMAT		= --target=efi-app-$(ARCH)
+-OBJCOPY		= objcopy
+-NM		= nm
+-AR		= ar
++OBJCOPY		?= objcopy
++NM		?= nm
++AR		?= ar
+ OPENSSL		= openssl
+ SBSIGN		= sbsign
+ SIGN_EFI_SIG_LIST ?= ./sign-efi-sig-list 

@@ -1,0 +1,123 @@
+From affca70d5bb6bc2fd3c5299ce9c8d4cae7003e7a Mon Sep 17 00:00:00 2001
+From: Pavel Zhukov <pzhukov@redhat.com>
+Date: Thu, 21 Feb 2019 10:36:30 +0100
+Subject: [PATCH] Turn on creating/sending of DUID
+
+as client identifier with DHCPv4 clients (#560361c#40, rfc4361)
+
+---
+ client/dhclient.c | 74 ++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 70 insertions(+), 4 deletions(-)
+
+diff --git a/client/dhclient.c b/client/dhclient.c
+index 8e57da9..ccc98e4 100644
+--- a/client/dhclient.c
++++ b/client/dhclient.c
+@@ -4021,6 +4021,59 @@ write_options(struct client_state *client, struct option_state *options,
+ 	}
+ }
+ 
++int unhexchar(char c) {
++
++	if (c >= '0' && c <= '9')
++		return c - '0';
++
++	if (c >= 'a' && c <= 'f')
++		return c - 'a' + 10;
++
++	if (c >= 'A' && c <= 'F')
++		return c - 'A' + 10;
++
++	return -1;
++}
++
++isc_result_t
++read_uuid(u_int8_t* uuid) {
++	const char *id_fname = "/etc/machine-id";
++	char id[32];
++	size_t nread;
++	FILE * file = fopen( id_fname , "r");
++	if (!file) {
++		log_debug("Cannot open %s", id_fname);
++		return ISC_R_IOERROR;
++	}
++	nread = fread(id, 1, sizeof id, file);
++	fclose(file);
++
++	if (nread < 32) {
++		log_debug("Not enough data in %s", id_fname);
++		return ISC_R_IOERROR;
++	}
++	int j;
++	for (j = 0; j < 16; j++) {
++		int a, b;
++
++		a = unhexchar(id[j*2]);
++		b = unhexchar(id[j*2+1]);
++
++		if (a < 0 || b < 0) {
++			log_debug("Wrong data in %s", id_fname);
++                        return ISC_R_IOERROR;
++		}
++		uuid[j] = a << 4 | b;
++	}
++
++	/* Set UUID version to 4 --- truly random generation */
++	uuid[6] = (uuid[6] & 0x0F) | 0x40;
++	/* Set the UUID variant to DCE */
++	uuid[8] = (uuid[8] & 0x3F) | 0x80;
++
++	return ISC_R_SUCCESS;
++}
++
+ /*
+  * The "best" default DUID, since we cannot predict any information
+  * about the system (such as whether or not the hardware addresses are
+@@ -4041,6 +4094,7 @@ form_duid(struct data_string *duid, const char *file, int line)
+ 	struct interface_info *ip;
+ 	int len;
+ 	char *str;
++	u_int8_t uuid[16];
+ 
+ 	/* For now, just use the first interface on the list. */
+ 	ip = interfaces;
+@@ -4061,9 +4115,16 @@ form_duid(struct data_string *duid, const char *file, int line)
+ 	    (ip->hw_address.hlen > sizeof(ip->hw_address.hbuf)))
+ 		log_fatal("Impossible hardware address length at %s:%d.", MDL);
+ 
+-	if (duid_type == 0)
+-		duid_type = stateless ? DUID_LL : DUID_LLT;
+-
++	if (duid_type == 0) {
++		if (read_uuid(uuid) == ISC_R_SUCCESS)
++		    duid_type = DUID_UUID;
++		else
++		    duid_type = stateless ? DUID_LL : DUID_LLT;
++	}
++	
++	if (duid_type == DUID_UUID)
++		len = 2 + sizeof (uuid);
++	else {
+ 	/*
+ 	 * 2 bytes for the 'duid type' field.
+ 	 * 2 bytes for the 'htype' field.
+@@ -4074,13 +4135,18 @@ form_duid(struct data_string *duid, const char *file, int line)
+ 	len = 4 + (ip->hw_address.hlen - 1);
+ 	if (duid_type == DUID_LLT)
+ 		len += 4;
++	}
+ 	if (!buffer_allocate(&duid->buffer, len, MDL))
+ 		log_fatal("no memory for default DUID!");
+ 	duid->data = duid->buffer->data;
+ 	duid->len = len;
+ 
++	if (duid_type == DUID_UUID) {
++		putUShort(duid->buffer->data, DUID_UUID);
++		memcpy(duid->buffer->data + 2, uuid, sizeof(uuid));
++	}
+ 	/* Basic Link Local Address type of DUID. */
+-	if (duid_type == DUID_LLT) {
++	else if (duid_type == DUID_LLT) {
+ 		putUShort(duid->buffer->data, DUID_LLT);
+ 		putUShort(duid->buffer->data + 2, ip->hw_address.hbuf[0]);
+ 		putULong(duid->buffer->data + 4, cur_time - DUID_TIME_EPOCH);

@@ -1,0 +1,7 @@
+#!/bin/sh
+
+maj=$(cat /proc/devices | awk '/ipmidev/{print $1}')
+if [ "$maj" ]; then
+    test -e /dev/ipmi0 && rm -f /dev/ipmi0
+    /bin/mknod -m 0600 /dev/ipmi0 c $maj 0
+fi

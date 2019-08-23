@@ -1,0 +1,637 @@
+From patchwork Sun Nov 19 12:33:52 2017
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [1/6] decode-dimms: Add preliminary DDR4 support
+X-Patchwork-Submitter: Jean Delvare <jdelvare@suse.de>
+X-Patchwork-Id: 839313
+Message-Id: <20171119133352.732aacd6@endymion>
+To: Linux I2C <linux-i2c@vger.kernel.org>
+Date: Sun, 19 Nov 2017 13:33:52 +0100
+From: Jean Delvare <jdelvare@suse.de>
+List-Id: <linux-i2c.vger.kernel.org>
+
+Recognize DDR4 memory as such, and print manufacturer information.
+---
+ eeprom/decode-dimms |   62 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 61 insertions(+), 1 deletion(-)
+
+--- i2c-tools.orig/eeprom/decode-dimms	2017-11-17 11:21:42.644379702 +0100
++++ i2c-tools/eeprom/decode-dimms	2017-11-17 11:21:44.196398606 +0100
+@@ -1702,6 +1702,17 @@ sub decode_ddr3_sdram($)
+ 
+ }
+ 
++# Parameter: EEPROM bytes 0-127 (using 1-1)
++sub decode_ddr4_sdram($)
++{
++	my $bytes = shift;
++
++# SPD revision
++	printl_cond($bytes->[1] != 0xff, "SPD Revision",
++		    ($bytes->[1] >> 4) . "." . ($bytes->[1] & 0xf));
++
++}
++
+ # Parameter: EEPROM bytes 0-127 (using 4-5)
+ sub decode_direct_rambus($)
+ {
+@@ -1747,6 +1758,10 @@ sub decode_rambus($)
+ 	"DDR SDRAM"	=> \&decode_ddr_sdram,
+ 	"DDR2 SDRAM"	=> \&decode_ddr2_sdram,
+ 	"DDR3 SDRAM"	=> \&decode_ddr3_sdram,
++	"DDR4 SDRAM"	=> \&decode_ddr4_sdram,
++	"DDR4E SDRAM"	=> \&decode_ddr4_sdram,
++	"LPDDR4 SDRAM"	=> \&decode_ddr4_sdram,
++	"LPDDR4X SDRAM"	=> \&decode_ddr4_sdram,
+ 	"Direct Rambus"	=> \&decode_direct_rambus,
+ 	"Rambus"	=> \&decode_rambus,
+ );
+@@ -1819,6 +1834,35 @@ sub decode_ddr3_mfg_data($)
+ 		    sprintf("0x%02X%02X", $bytes->[146], $bytes->[147]));
+ }
+ 
++# Parameter: EEPROM bytes 0-383 (using 320-351)
++sub decode_ddr4_mfg_data($)
++{
++	my $bytes = shift;
++
++	prints("Manufacturer Data");
++
++	printl("Module Manufacturer",
++	       manufacturer_ddr3($bytes->[320], $bytes->[321]));
++
++	printl_cond(spd_written(@{$bytes}[350..351]),
++		    "DRAM Manufacturer",
++		    manufacturer_ddr3($bytes->[350], $bytes->[351]));
++
++	printl_mfg_location_code($bytes->[322]);
++
++	printl_cond(spd_written(@{$bytes}[323..324]),
++		    "Manufacturing Date",
++		    manufacture_date($bytes->[323], $bytes->[324]));
++
++	printl_mfg_assembly_serial(@{$bytes}[325..328]);
++
++	printl("Part Number", part_number(@{$bytes}[329..348]));
++
++	printl_cond(spd_written(@{$bytes}[349]),
++		    "Revision Code",
++		    sprintf("0x%02X", $bytes->[349]));
++}
++
+ # Parameter: EEPROM bytes 0-127 (using 64-98)
+ sub decode_manufacturing_information($)
+ {
+@@ -1941,8 +1985,14 @@ sub read_hexdump($)
+ sub spd_sizes($)
+ {
+ 	my $bytes = shift;
++	my $type = $bytes->[2];
+ 
+-	if ($bytes->[2] >= 9) {
++	if ($type == 12 || $type == 14 || $type == 16 || $type == 17) {
++		# DDR4
++		my $spd_len = 256 * (($bytes->[0] >> 4) & 7);
++		my $used = 128 * ($bytes->[0] & 15);
++		return ($spd_len, $used);
++	} elsif ($type >= 9) {
+ 		# For FB-DIMM and newer, decode number of bytes written
+ 		my $spd_len = ($bytes->[0] >> 4) & 7;
+ 		my $size = 64 << ($bytes->[0] & 15);
+@@ -2285,6 +2335,9 @@ for $current (0 .. $#dimm) {
+ 			"DDR SGRAM", "DDR SDRAM",	# 6, 7
+ 			"DDR2 SDRAM", "FB-DIMM",	# 8, 9
+ 			"FB-DIMM Probe", "DDR3 SDRAM",	# 10, 11
++			"DDR4 SDRAM", "Reserved",	# 12, 13
++			"DDR4E SDRAM", "LPDDR3 SDRAM",	# 14, 15
++			"LPDDR4 SDRAM", "LPDDR4X SDRAM", # 16, 17
+ 		);
+ 		if ($bytes[2] < @type_list) {
+ 			$type = $type_list[$bytes[2]];
+@@ -2300,6 +2353,13 @@ for $current (0 .. $#dimm) {
+ 		# Decode DDR3-specific manufacturing data in bytes
+ 		# 117-149
+ 		decode_ddr3_mfg_data(\@bytes)
++	} elsif ($type eq "DDR4 SDRAM" ||
++		 $type eq "DDR4E SDRAM" ||
++		 $type eq "LPDDR4 SDRAM" ||
++		 $type eq "LPDDR4X SDRAM") {
++		# Decode DDR4-specific manufacturing data in bytes
++		# 320-383
++		decode_ddr4_mfg_data(\@bytes)
+ 	} else {
+ 		# Decode next 35 bytes (64-98, common to most
+ 		# memory types)
+
+From patchwork Sun Nov 19 12:34:18 2017
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [2/6] decode-dimms: Decode size and timings of DDR4
+X-Patchwork-Submitter: Jean Delvare <jdelvare@suse.de>
+X-Patchwork-Id: 839314
+Message-Id: <20171119133418.63d7e0a6@endymion>
+To: Linux I2C <linux-i2c@vger.kernel.org>
+Date: Sun, 19 Nov 2017 13:34:18 +0100
+From: Jean Delvare <jdelvare@suse.de>
+List-Id: <linux-i2c.vger.kernel.org>
+
+Decode the memory module size and timings of DDR4 memory.
+---
+ eeprom/decode-dimms |  177 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 176 insertions(+), 1 deletion(-)
+
+--- i2c-tools.orig/eeprom/decode-dimms	2017-11-17 11:21:44.196398606 +0100
++++ i2c-tools/eeprom/decode-dimms	2017-11-17 11:24:29.028405403 +0100
+@@ -1702,15 +1702,190 @@ sub decode_ddr3_sdram($)
+ 
+ }
+ 
+-# Parameter: EEPROM bytes 0-127 (using 1-1)
++# Return combined time in ns
++sub ddr4_mtb_ftb($$$$)
++{
++	my ($byte1, $byte2, $mtb, $ftb) = @_;
++
++	# byte1 is unsigned in ps, but byte2 is signed in ps
++	$byte2 -= 0x100 if $byte2 & 0x80;
++
++	return ($byte1 * $mtb + $byte2 * $ftb) / 1000;
++}
++
++# Rounded per DDR4 specifications
++sub ddr4_core_timings($$$$$)
++{
++	my ($cas, $ctime, $trcd, $trp, $tras) = @_;
++
++	return $cas . "-" . ceil($trcd/$ctime - 0.025) .
++		      "-" . ceil($trp/$ctime - 0.025) .
++		      "-" . ceil($tras/$ctime - 0.025);
++}
++
++use constant DDR4_UNBUFFERED	=> 1;
++use constant DDR4_REGISTERED	=> 2;
++use constant DDR4_LOAD_REDUCED	=> 4;
++
++# Parameter: EEPROM bytes 0-383 (using 1-125)
+ sub decode_ddr4_sdram($)
+ {
+ 	my $bytes = shift;
++	my ($ctime, $ctime_max);
++	my ($ftb, $mtb);
++	my $ii;
++
++	my @module_types = (
++		{ type => "Extended type",	},
++		{ type => "RDIMM",		family => DDR4_REGISTERED },
++		{ type => "UDIMM",		family => DDR4_UNBUFFERED },
++		{ type => "SO-DIMM",		family => DDR4_UNBUFFERED },
++		{ type => "LRDIMM",		family => DDR4_LOAD_REDUCED },
++		{ type => "Mini-RDIMM",		family => DDR4_REGISTERED },
++		{ type => "Mini-UDIMM",		family => DDR4_UNBUFFERED },
++		{ type => "Reserved (0x07)",	},
++		{ type => "72b-SO-RDIMM",	family => DDR4_REGISTERED },
++		{ type => "72b-SO-UDIMM",	family => DDR4_UNBUFFERED },
++		{ type => "Reserved (0x0A)",	},
++		{ type => "Reserved (0x0B)",	},
++		{ type => "16b-SO-DIMM",	family => DDR4_UNBUFFERED },
++		{ type => "32b-SO-DIMM",	family => DDR4_UNBUFFERED },
++		{ type => "Reserved (0x0E)",	},
++		{ type => "No base memory",	},
++	);
+ 
+ # SPD revision
+ 	printl_cond($bytes->[1] != 0xff, "SPD Revision",
+ 		    ($bytes->[1] >> 4) . "." . ($bytes->[1] & 0xf));
+ 
++	printl("Module Type", $module_types[$bytes->[3] & 0x0f]->{type});
++
++# time bases
++	if (($bytes->[17] & 0x03) != 0x00 || ($bytes->[17] & 0xc0) != 0x00) {
++		print STDERR "Unknown time base values, can't decode\n";
++		return;
++	}
++	$ftb = 1;	# ps
++	$mtb = 125;	# ps
++
++# speed
++	prints("Memory Characteristics");
++
++	$ctime = ddr4_mtb_ftb($bytes->[18], $bytes->[125], $mtb, $ftb);
++	$ctime_max = ddr4_mtb_ftb($bytes->[19], $bytes->[124], $mtb, $ftb);
++
++	my $ddrclk = 2 * (1000 / $ctime);
++	my $tbits = 8 << ($bytes->[13] & 7);
++	my $pcclk = int ($ddrclk * $tbits / 8);
++	# Round down to comply with Jedec
++	$pcclk = $pcclk - ($pcclk % 100);
++	$ddrclk = int ($ddrclk);
++	printl("Maximum module speed", "$ddrclk MHz (PC4-${pcclk})");
++
++# Size computation
++	my $sdram_width = 4 << ($bytes->[12] & 0x07);
++	my $ranks = (($bytes->[12] >> 3) & 0x07) + 1;
++	my $signal_loading = $bytes->[6] & 0x03;
++	my $die_count = (($bytes->[6] >> 4) & 0x07) + 1;
++	my $cap = (256 << ($bytes->[4] & 0x0f)) / 8;
++	$cap *= (8 << ($bytes->[13] & 0x07)) / $sdram_width;
++	$cap *= $ranks;
++	$cap *= $die_count if $signal_loading == 0x02;		# 3DS
++	printl("Size", $cap . " MB");
++
++	printl("Banks x Rows x Columns x Bits",
++	       join(' x ', (1 << ($bytes->[4] >> 6)) * (4 << (($bytes->[4] >> 4) & 0x03)),
++			   ((($bytes->[5] >> 3) & 7) + 12),
++			   ( ($bytes->[5]       & 7) +  9),
++			   (8 << ($bytes->[13] & 0x07))));
++
++	printl("SDRAM Device Width", "$sdram_width bits");
++	printl("Ranks", $ranks);
++	printl_cond($ranks > 1, "Rank Mix",
++		    $bytes->[12] & 0x40 ? "Asymmetrical" : "Symmetrical");
++	printl_cond($bytes->[13] & 0x18, "Bus Width Extension", ($bytes->[13] & 0x18)." bits");
++
++	my $taa;
++	my $trcd;
++	my $trp;
++	my $tras;
++
++	$taa  = ddr4_mtb_ftb($bytes->[24], $bytes->[123], $mtb, $ftb);
++	$trcd = ddr4_mtb_ftb($bytes->[25], $bytes->[122], $mtb, $ftb);
++	$trp  = ddr4_mtb_ftb($bytes->[26], $bytes->[121], $mtb, $ftb);
++	$tras = ((($bytes->[27] & 0x0f) << 8) + $bytes->[28]) * $mtb / 1000;
++
++	printl("AA-RCD-RP-RAS (cycles)",
++	       ddr4_core_timings(ceil($taa/$ctime - 0.025), $ctime,
++	                         $trcd, $trp, $tras));
++
++# latencies
++	my %cas;
++	my $cas_sup = ($bytes->[23] << 24) + ($bytes->[22] << 16) +
++		      ($bytes->[21] << 8) + $bytes->[20];
++	my $base_cas = $bytes->[23] & 0x80 ? 23 : 7;
++
++	for ($ii = 0; $ii < 30; $ii++) {
++		if ($cas_sup & (1 << $ii)) {
++			$cas{$base_cas + $ii}++;
++		}
++	}
++	printl("Supported CAS Latencies", cas_latencies(keys %cas));
++
++# standard DDR4 speeds
++	prints("Timings at Standard Speeds");
++	foreach my $ctime_at_speed (15/24, 15/22, 15/20, 15/18, 15/16, 15/14, 15/12) {
++		my $best_cas = 0;
++
++		# Find min CAS latency at this speed
++		for ($ii = 29; $ii >= 0; $ii--) {
++			next unless ($cas_sup & (1 << $ii));
++			if (ceil($taa/$ctime_at_speed - 0.025) <= $base_cas + $ii) {
++				$best_cas = $base_cas + $ii;
++			}
++		}
++
++		printl_cond($best_cas && $ctime_at_speed >= $ctime
++				      && $ctime_at_speed <= $ctime_max,
++			    "AA-RCD-RP-RAS (cycles)" . as_ddr(4, $ctime_at_speed),
++			    ddr4_core_timings($best_cas, $ctime_at_speed,
++					     $trcd, $trp, $tras));
++	}
++
++# more timing information
++	prints("Timing Parameters");
++
++	printl("Minimum Cycle Time (tCKmin)", tns3($ctime));
++	printl("Maximum Cycle Time (tCKmax)", tns3($ctime_max));
++	printl("Minimum CAS Latency Time (tAA)", tns3($taa));
++	printl("Minimum RAS to CAS Delay (tRCD)", tns3($trcd));
++	printl("Minimum Row Precharge Delay (tRP)", tns3($trp));
++	printl("Minimum Active to Precharge Delay (tRAS)", tns3($tras));
++	printl("Minimum Active to Auto-Refresh Delay (tRC)",
++		tns3(ddr4_mtb_ftb((($bytes->[27] & 0xf0) << 4) + $bytes->[29],
++				  $bytes->[120], $mtb, $ftb)));
++	printl("Minimum Recovery Delay (tRFC1)",
++		tns3((($bytes->[31] << 8) + $bytes->[30]) * $mtb / 1000));
++	printl("Minimum Recovery Delay (tRFC2)",
++		tns3((($bytes->[33] << 8) + $bytes->[32]) * $mtb / 1000));
++	printl("Minimum Recovery Delay (tRFC4)",
++		tns3((($bytes->[35] << 8) + $bytes->[34]) * $mtb / 1000));
++	printl("Minimum Four Activate Window Delay (tFAW)",
++		tns3(((($bytes->[36] & 0x0f) << 8) + $bytes->[37]) * $mtb / 1000));
++	printl("Minimum Row Active to Row Active Delay (tRRD_S)",
++		tns3(ddr4_mtb_ftb($bytes->[38], $bytes->[119], $mtb, $ftb)));
++	printl("Minimum Row Active to Row Active Delay (tRRD_L)",
++		tns3(ddr4_mtb_ftb($bytes->[39], $bytes->[118], $mtb, $ftb)));
++	printl("Minimum CAS to CAS Delay (tCCD_L)",
++		tns3(ddr4_mtb_ftb($bytes->[40], $bytes->[117], $mtb, $ftb)));
++
++	# Optional?
++	my $twr = ((($bytes->[41] & 0x0f) << 8) + $bytes->[42]) * $mtb / 1000;
++	printl_cond($twr, "Minimum Write Recovery Time (tWR)", tns3($twr));
++	my $twtr = ((($bytes->[43] & 0x0f) << 8) + $bytes->[44]) * $mtb / 1000;
++	printl_cond($twtr, "Minimum Write to Read Time (tWTR_S)", tns3($twtr));
++	$twtr = ((($bytes->[43] & 0xf0) << 4) + $bytes->[45]) * $mtb / 1000;
++	printl_cond($twtr, "Minimum Write to Read Time (tWTR_L)", tns3($twtr));
+ }
+ 
+ # Parameter: EEPROM bytes 0-127 (using 4-5)
+
+From patchwork Sun Nov 19 12:34:38 2017
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [3/6] decode-dimms: Decode misc parameters of DDR4
+X-Patchwork-Submitter: Jean Delvare <jdelvare@suse.de>
+X-Patchwork-Id: 839315
+Message-Id: <20171119133438.6bb65fc6@endymion>
+To: Linux I2C <linux-i2c@vger.kernel.org>
+Date: Sun, 19 Nov 2017 13:34:38 +0100
+From: Jean Delvare <jdelvare@suse.de>
+List-Id: <linux-i2c.vger.kernel.org>
+
+Print some additional information for DDR4 SDRAM memory modules.
+---
+ eeprom/decode-dimms |   29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+--- i2c-tools.orig/eeprom/decode-dimms	2017-11-17 11:24:29.028405403 +0100
++++ i2c-tools/eeprom/decode-dimms	2017-11-17 11:25:15.453970328 +0100
+@@ -1886,6 +1886,35 @@ sub decode_ddr4_sdram($)
+ 	printl_cond($twtr, "Minimum Write to Read Time (tWTR_S)", tns3($twtr));
+ 	$twtr = ((($bytes->[43] & 0xf0) << 4) + $bytes->[45]) * $mtb / 1000;
+ 	printl_cond($twtr, "Minimum Write to Read Time (tWTR_L)", tns3($twtr));
++
++# miscellaneous stuff
++	prints("Other Information");
++
++	my $package_type = ($bytes->[6] & 0x80) == 0x00 ? "Monolithic" :
++			   $signal_loading == 0x01 ? "Multi-load stack" :
++			   $signal_loading == 0x02 ? "3DS" : "Unknown";
++	$package_type .= sprintf(" (%u dies)", $die_count) if $die_count >= 2;
++	printl("Package Type", $package_type);
++
++	my @mac = ("Untested",
++		   "700 K", "600 K", "500 K", "400 K", "300 K", "200 K",
++		   undef, "Unlimited");
++	my $mac = $bytes->[7] & 0x0f;
++	printl_cond(defined $mac[$mac], "Maximum Activate Count", $mac[$mac]);
++
++	my $ppr = $bytes->[9] >> 6;
++	printl("Post Package Repair",
++	       $ppr == 0x00 ? "Not supported" :
++	       $ppr == 0x01 ? "One row per bank group" : "Unknown");
++	printl_cond($ppr != 0x00, "Soft PPR", $bytes->[9] & 0x20 ?
++		    "Supported" : "Not Supported");
++
++	printl("Module Nominal Voltage",
++	       $bytes->[11] & 0x01 ? "1.2 V" :
++	       $bytes->[11] & 0x02 ? "Unknown (1.2 V endurant)" : "Unknown");
++
++	printl("Thermal Sensor",
++	       $bytes->[14] & 0x80 ? "TSE2004 compliant" : "No");
+ }
+ 
+ # Parameter: EEPROM bytes 0-127 (using 4-5)
+
+From patchwork Sun Nov 19 12:35:22 2017
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [4/6] decode-dimms: Decode physical characteristics of DDR4
+X-Patchwork-Submitter: Jean Delvare <jdelvare@suse.de>
+X-Patchwork-Id: 839317
+Message-Id: <20171119133522.1f2046af@endymion>
+To: Linux I2C <linux-i2c@vger.kernel.org>
+Date: Sun, 19 Nov 2017 13:35:22 +0100
+From: Jean Delvare <jdelvare@suse.de>
+List-Id: <linux-i2c.vger.kernel.org>
+
+Print the physical characteristics of unbuffered, registered and
+load-reduced DDR4 SDRAM modules.
+---
+ eeprom/decode-dimms |   22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+--- i2c-tools.orig/eeprom/decode-dimms	2017-11-17 11:25:15.453970328 +0100
++++ i2c-tools/eeprom/decode-dimms	2017-11-17 11:27:11.401380668 +0100
+@@ -1404,6 +1404,7 @@ sub ddr3_mtb_ftb($$$$)
+ 	return $byte1 * $mtb + $byte2 * $ftb / 1000;
+ }
+ 
++# Also works for DDR4
+ sub ddr3_reference_card($$)
+ {
+ 	my ($rrc, $ext) = @_;
+@@ -1727,7 +1728,7 @@ use constant DDR4_UNBUFFERED	=> 1;
+ use constant DDR4_REGISTERED	=> 2;
+ use constant DDR4_LOAD_REDUCED	=> 4;
+ 
+-# Parameter: EEPROM bytes 0-383 (using 1-125)
++# Parameter: EEPROM bytes 0-383 (using 1-130)
+ sub decode_ddr4_sdram($)
+ {
+ 	my $bytes = shift;
+@@ -1915,6 +1916,25 @@ sub decode_ddr4_sdram($)
+ 
+ 	printl("Thermal Sensor",
+ 	       $bytes->[14] & 0x80 ? "TSE2004 compliant" : "No");
++
++# type-specific settings
++	if ($module_types[$bytes->[3] & 0x0f]->{family} == DDR4_UNBUFFERED ||
++	    $module_types[$bytes->[3] & 0x0f]->{family} == DDR4_REGISTERED ||
++	    $module_types[$bytes->[3] & 0x0f]->{family} == DDR4_LOAD_REDUCED) {
++		prints("Physical Characteristics");
++
++		my $height = $bytes->[128] & 0x1f;
++		printl("Module Height",
++		       $height == 0x00 ? "15 mm or less" :
++		       $height == 0x1f ? "more than 45 mm" :
++		       sprintf("%u mm", $height + 15));
++		printl("Module Thickness",
++		       sprintf("%d mm front, %d mm back",
++			       ($bytes->[129] & 0x0f) + 1,
++			       (($bytes->[129] >> 4) & 15) + 1));
++		printl("Module Reference Card",
++		       ddr3_reference_card($bytes->[130], $bytes->[128]));
++	}
+ }
+ 
+ # Parameter: EEPROM bytes 0-127 (using 4-5)
+
+From patchwork Sun Nov 19 12:36:48 2017
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [5/6] decode-dimms: Documentation update for DDR4
+X-Patchwork-Submitter: Jean Delvare <jdelvare@suse.de>
+X-Patchwork-Id: 839322
+Message-Id: <20171119133648.41e9e1f9@endymion>
+To: Linux I2C <linux-i2c@vger.kernel.org>
+Date: Sun, 19 Nov 2017 13:36:48 +0100
+From: Jean Delvare <jdelvare@suse.de>
+List-Id: <linux-i2c.vger.kernel.org>
+
+The EEPROMs used to store SPD data on DDR4 SDRAM modules have their
+own kernel driver: ee1004.
+---
+ eeprom/decode-dimms   |   10 +++++++---
+ eeprom/decode-dimms.1 |    7 ++++---
+ 2 files changed, 11 insertions(+), 6 deletions(-)
+
+--- i2c-tools.orig/eeprom/decode-dimms	2017-11-17 11:27:11.401380668 +0100
++++ i2c-tools/eeprom/decode-dimms	2017-11-17 11:28:32.262363769 +0100
+@@ -5,7 +5,7 @@
+ # Copyright 1998, 1999 Philip Edelbrock <phil@netroedge.com>
+ # modified by Christian Zuckschwerdt <zany@triq.net>
+ # modified by Burkart Lingner <burkart@bollchen.de>
+-# Copyright (C) 2005-2013  Jean Delvare <jdelvare@suse.de>
++# Copyright (C) 2005-2017  Jean Delvare <jdelvare@suse.de>
+ #
+ #    This program is free software; you can redistribute it and/or modify
+ #    it under the terms of the GNU General Public License as published by
+@@ -2410,7 +2410,9 @@ sub get_dimm_list
+ 	my (@dirs, $dir, $opened, $file, @files);
+ 
+ 	if ($use_sysfs) {
+-		@dirs = ('/sys/bus/i2c/drivers/eeprom', '/sys/bus/i2c/drivers/at24');
++		@dirs = ('/sys/bus/i2c/drivers/eeprom',
++			 '/sys/bus/i2c/drivers/at24',
++			 '/sys/bus/i2c/drivers/ee1004');	# DDR4
+ 	} else {
+ 		@dirs = ('/proc/sys/dev/sensors');
+ 	}
+@@ -2428,7 +2430,9 @@ sub get_dimm_list
+ 				# or spd (driver at24)
+ 				my $attr = sysfs_device_attribute("$dir/$file", "name");
+ 				next unless defined $attr &&
+-					    ($attr eq "eeprom" || $attr eq "spd");
++					    ($attr eq "eeprom" ||
++					     $attr eq "spd" ||
++					     $attr eq "ee1004");	# DDR4
+ 			} else {
+ 				next unless $file =~ /^eeprom-/;
+ 			}
+--- i2c-tools.orig/eeprom/decode-dimms.1	2017-11-17 11:21:42.505378009 +0100
++++ i2c-tools/eeprom/decode-dimms.1	2017-11-17 11:28:32.262363769 +0100
+@@ -1,6 +1,7 @@
+ .\"
+ .\"  decode-dimms.1 - manpage for the i2c-tools/decode-dimms utility
+ .\"  Copyright (C) 2013  Jaromir Capik
++.\"  Copyright (C) 2017  Jean Delvare
+ .\"
+ .\"  This program is free software; you can redistribute it and/or modify
+ .\"  it under the terms of the GNU General Public License as published by
+@@ -16,7 +17,7 @@
+ .\"  with this program; if not, write to the Free Software Foundation, Inc.,
+ .\"  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ .\"
+-.TH decode-dimms 1 "Oct 2013" "i2c-tools" "User Commands"
++.TH decode-dimms 1 "Nov 2017" "i2c-tools" "User Commands"
+ .SH NAME
+ decode-dimms \- decode the information found in memory module SPD EEPROMs
+ .SH SYNOPSIS
+@@ -31,8 +32,8 @@ The purpose of the
+ .B decode-dimms
+ tool is to decode the information found in memory module SPD EEPROMs.
+ The SPD data is read either from the running system or dump files.
+-In the former case, the tool requires either the eeprom kernel module
+-or the at24 kernel module to be loaded.
++In the former case, the tool requires a kernel module to be loaded:
++eeprom, at24 or ee1004 (for DDR4 SDRAM.)
+ .SH PARAMETERS
+ .TP
+ .B \-f, --format
+
+From patchwork Sun Nov 19 12:37:46 2017
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [6/6] decode-dimms: Verify the CRC of DDR4 data block 1
+X-Patchwork-Submitter: Jean Delvare <jdelvare@suse.de>
+X-Patchwork-Id: 839323
+Message-Id: <20171119133746.4c9e518b@endymion>
+To: Linux I2C <linux-i2c@vger.kernel.org>
+Date: Sun, 19 Nov 2017 13:37:46 +0100
+From: Jean Delvare <jdelvare@suse.de>
+List-Id: <linux-i2c.vger.kernel.org>
+
+On DDR4 modules there is a separate CRC for the second block of 128
+bytes. Check it.
+---
+ eeprom/decode-dimms |   32 +++++++++++++++++++++++++-------
+ 1 file changed, 25 insertions(+), 7 deletions(-)
+
+--- i2c-tools.orig/eeprom/decode-dimms	2017-11-17 11:28:32.262363769 +0100
++++ i2c-tools/eeprom/decode-dimms	2017-11-17 11:29:23.760989692 +0100
+@@ -1728,7 +1728,7 @@ use constant DDR4_UNBUFFERED	=> 1;
+ use constant DDR4_REGISTERED	=> 2;
+ use constant DDR4_LOAD_REDUCED	=> 4;
+ 
+-# Parameter: EEPROM bytes 0-383 (using 1-130)
++# Parameter: EEPROM bytes 0-383 (using 1-255)
+ sub decode_ddr4_sdram($)
+ {
+ 	my $bytes = shift;
+@@ -1761,6 +1761,15 @@ sub decode_ddr4_sdram($)
+ 
+ 	printl("Module Type", $module_types[$bytes->[3] & 0x0f]->{type});
+ 
++# CRC of block 1
++	my $crc_calc = calculate_crc($bytes, 128, 126);
++	my $crc_spd = ($bytes->[255] << 8) | $bytes->[254];
++	my $crc_block_1_ok = $crc_calc == $crc_spd;
++	printl("EEPROM CRC of bytes 128-253", $crc_block_1_ok ?
++		sprintf("OK (0x\%04X)", $crc_calc) :
++		sprintf("Bad\n(found 0x\%04X, calculated 0x\%04X)",
++			$crc_spd, $crc_calc));
++
+ # time bases
+ 	if (($bytes->[17] & 0x03) != 0x00 || ($bytes->[17] & 0xc0) != 0x00) {
+ 		print STDERR "Unknown time base values, can't decode\n";
+@@ -1918,6 +1927,8 @@ sub decode_ddr4_sdram($)
+ 	       $bytes->[14] & 0x80 ? "TSE2004 compliant" : "No");
+ 
+ # type-specific settings
++	return unless $crc_block_1_ok || $opt_igncheck;
++
+ 	if ($module_types[$bytes->[3] & 0x0f]->{family} == DDR4_UNBUFFERED ||
+ 	    $module_types[$bytes->[3] & 0x0f]->{family} == DDR4_REGISTERED ||
+ 	    $module_types[$bytes->[3] & 0x0f]->{family} == DDR4_LOAD_REDUCED) {
+@@ -2288,15 +2299,14 @@ sub checksum($)
+ }
+ 
+ # Calculate and verify CRC
+-sub check_crc($)
++sub calculate_crc($$$)
+ {
+-	my $bytes = shift;
++	my ($bytes, $start, $len) = @_;
+ 	my $crc = 0;
+-	my $crc_cover = $bytes->[0] & 0x80 ? 116 : 125;
+-	my $crc_ptr = 0;
++	my $crc_ptr = $start;
+ 	my $crc_bit;
+ 
+-	while ($crc_ptr <= $crc_cover) {
++	while ($crc_ptr < $start + $len) {
+ 		$crc = $crc ^ ($bytes->[$crc_ptr] << 8);
+ 		for ($crc_bit = 0; $crc_bit < 8; $crc_bit++) {
+ 			if ($crc & 0x8000) {
+@@ -2307,7 +2317,15 @@ sub check_crc($)
+ 		}
+ 		$crc_ptr++;
+ 	}
+-	$crc &= 0xffff;
++
++	return $crc & 0xffff;
++}
++
++sub check_crc($)
++{
++	my $bytes = shift;
++	my $crc_cover = $bytes->[0] & 0x80 ? 116 : 125;
++	my $crc = calculate_crc($bytes, 0, $crc_cover + 1);
+ 
+ 	my $dimm_crc = ($bytes->[127] << 8) | $bytes->[126];
+ 	return ("EEPROM CRC of bytes 0-$crc_cover",

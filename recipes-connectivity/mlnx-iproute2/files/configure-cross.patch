@@ -1,0 +1,21 @@
+Index: mlnx-iproute2-4.20.0/configure
+===================================================================
+--- mlnx-iproute2-4.20.0.orig/configure	2019-02-25 19:06:47.908234870 +0000
++++ mlnx-iproute2-4.20.0/configure	2019-02-25 19:07:01.804122312 +0000
+@@ -3,6 +3,7 @@
+ # This is not an autoconf generated configure
+ #
+ INCLUDE=${1:-"$PWD/include"}
++SYSROOT=$1
+ 
+ # Output file which is input to Makefile
+ CONFIG=config.mk
+@@ -163,7 +164,7 @@ check_ipt_lib_dir()
+ 		return
+ 	fi
+ 
+-	for dir in /lib /usr/lib /usr/local/lib; do
++	for dir in $SYSROOT/lib $SYSROOT/usr/lib $SYSROOT/usr/local/lib; do
+ 		for file in "xtables" "iptables"; do
+ 			file="$dir/$file/lib*t_*so"
+ 			if [ -f $file ]; then

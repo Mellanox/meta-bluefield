@@ -1,0 +1,9 @@
+We want to include more fonts than are available in the
+xorg-minimal-fonts package.  The missing fonts are in the
+font-misc-misc package.  The problem is, those 2 packages
+conflict.  This modified recipe tries to resolve those
+conflicts by eliminating the overlapping fonts.
+
+Note that excluding the xorg-minimal-fonts recipe causes
+all sorts of dependency issues we would rather not deal
+with.

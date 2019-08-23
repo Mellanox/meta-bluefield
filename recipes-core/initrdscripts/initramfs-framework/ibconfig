@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# Helper script to bring up and configure Infiniband interfaces
+# while PXE booting and mounting NFS root file system.
+
+LIB_IB=/lib/modules/`uname -r`/updates/drivers/infiniband/
+
+[ ! -f "$LIB_IB/ulp/ipoib/ib_ipoib.ko" ] \
+	&& exit 0
+
+# Load the IPoIB module
+modprobe ib_ipoib
+
+# Lookup the actual kernel interfaces, and bring up the corresponding
+# network interfaces.
+find /sys/class/net -name ib* | while read i; do
+	interface=$(basename $i)
+	ifconfig $interface up
+
+	## The cleaner manner consists of waiting until the
+	## interface is up and check the sysfs attribute for
+	## the given interface prior to starting 'dhclient'.
+	# sleep 3
+	## Obtain a network address if the link is up
+	# status=$(cat /sys/class/net/$interface/carrier)
+	# [ "$status" == "1" ] && dhclient $interface
+
+	# Now the dirty manner: 'dhclient' would make multiple
+	# attempts to obtain a network address, thus that
+	# gives sometime until the interface gets up.
+	/sbin/dhclient $interface
+done

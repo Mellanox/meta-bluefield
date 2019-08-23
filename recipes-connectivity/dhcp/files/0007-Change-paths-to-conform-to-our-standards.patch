@@ -1,0 +1,50 @@
+From ff695c9d6ef456e3feab962e34d7dd2d7c4fb115 Mon Sep 17 00:00:00 2001
+From: Pavel Zhukov <pzhukov@redhat.com>
+Date: Thu, 21 Feb 2019 10:26:34 +0100
+Subject: [PATCH] Change paths to conform to our standards
+
+---
+ doc/examples/dhcpd-dhcpv6.conf | 2 +-
+ includes/dhcpd.h               | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/doc/examples/dhcpd-dhcpv6.conf b/doc/examples/dhcpd-dhcpv6.conf
+index 448a6a6..2357824 100644
+--- a/doc/examples/dhcpd-dhcpv6.conf
++++ b/doc/examples/dhcpd-dhcpv6.conf
+@@ -43,7 +43,7 @@ option dhcp6.domain-search "test.example.com","example.com";
+ option dhcp6.info-refresh-time 21600;
+ 
+ # The path of the lease file
+-dhcpv6-lease-file-name "/usr/local/var/db/dhcpd6.leases";
++dhcpv6-lease-file-name "/var/lib/dhcpd/dhcpd6.leases";
+ 
+ # Static definition (must be global)
+ host myclient {
+diff --git a/includes/dhcpd.h b/includes/dhcpd.h
+index 018fa34..3632a6b 100644
+--- a/includes/dhcpd.h
++++ b/includes/dhcpd.h
+@@ -1545,7 +1545,7 @@ typedef unsigned char option_mask [16];
+ #else /* !DEBUG */
+ 
+ #ifndef _PATH_DHCPD_CONF
+-#define _PATH_DHCPD_CONF	"/etc/dhcpd.conf"
++#define _PATH_DHCPD_CONF	"/etc/dhcp/dhcpd.conf"
+ #endif /* DEBUG */
+ 
+ #ifndef _PATH_DHCPD_DB
+@@ -1567,11 +1567,11 @@ typedef unsigned char option_mask [16];
+ #endif /* DEBUG */
+ 
+ #ifndef _PATH_DHCLIENT_CONF
+-#define _PATH_DHCLIENT_CONF	"/etc/dhclient.conf"
++#define _PATH_DHCLIENT_CONF	"/etc/dhcp/dhclient.conf"
+ #endif
+ 
+ #ifndef _PATH_DHCLIENT_SCRIPT
+-#define _PATH_DHCLIENT_SCRIPT	"/sbin/dhclient-script"
++#define _PATH_DHCLIENT_SCRIPT	"/usr/sbin/dhclient-script"
+ #endif
+ 
+ #ifndef _PATH_DHCLIENT_PID

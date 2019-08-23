@@ -1,0 +1,5 @@
+[Match]
+Path = platform-MLNXBF17:00
+
+[Network]
+Address = 192.168.200.1/24

@@ -1,0 +1,23 @@
+[Unit]
+Description=Open vSwitch Database Unit
+After=syslog.target network-pre.target
+Before=network.target network.service
+Wants=ovs-delete-transient-ports.service
+PartOf=openvswitch.service
+
+[Service]
+Type=forking
+Restart=on-failure
+EnvironmentFile=/etc/openvswitch/default.conf
+EnvironmentFile=-/etc/sysconfig/openvswitch
+EnvironmentFile=-/run/openvswitch/useropts
+ExecStart=/usr/share/openvswitch/scripts/ovs-ctl \
+          --no-ovs-vswitchd --no-monitor --system-id=random \
+          ${OVSUSER} \
+          start $OPTIONS
+ExecStop=/usr/share/openvswitch/scripts/ovs-ctl --no-ovs-vswitchd stop
+ExecReload=/usr/share/openvswitch/scripts/ovs-ctl --no-ovs-vswitchd \
+           ${OVSUSER} \
+           --no-monitor restart $OPTIONS
+RuntimeDirectory=openvswitch
+RuntimeDirectoryMode=0755
